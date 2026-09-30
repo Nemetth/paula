@@ -1,26 +1,75 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-terracota: #d9502d;
+  --color-verde: #3f7a5c;
+  --color-ambar: #c98a2e;
+  --color-bg: #faf7f2;
+  --color-bg-elevada: #fdfcfa;
+  --color-texto: #211d18;
+  --color-texto-secundario: #6b6558;
+  --color-borde: #e8e2d6;
+  --shadow-nav: 0 -2px 16px rgba(33, 29, 24, 0.08);
+  --shadow-sheet: 0 8px 32px rgba(33, 29, 24, 0.16);
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --color-terracota: #e8693f;
+    --color-verde: #4f9573;
+    --color-ambar: #d9a24e;
+    --color-bg: #1b1712;
+    --color-bg-elevada: #221d17;
+    --color-texto: #f5f0e6;
+    --color-texto-secundario: #b5ac9a;
+    --color-borde: #332c22;
+    --shadow-nav: 0 -2px 16px rgba(0, 0, 0, 0.35);
+    --shadow-sheet: 0 8px 32px rgba(0, 0, 0, 0.45);
   }
 }
 
+@theme inline {
+  --color-terracota: var(--color-terracota);
+  --color-verde: var(--color-verde);
+  --color-ambar: var(--color-ambar);
+  --color-bg: var(--color-bg);
+  --color-bg-elevada: var(--color-bg-elevada);
+  --color-texto: var(--color-texto);
+  --color-texto-secundario: var(--color-texto-secundario);
+  --color-borde: var(--color-borde);
+  --font-sans: var(--font-inter);
+}
+
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+html,
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  height: 100%;
+}
+
+body {
+  background: var(--color-bg);
+  color: var(--color-texto);
+  font-family: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+}
+
+::selection {
+  background: color-mix(in oklab, var(--color-terracota) 25%, transparent);
+}
+
+.input {
+  width: 100%;
+  border-radius: 12px;
+  border: 1px solid var(--color-borde);
+  background: var(--color-bg-elevada);
+  padding: 0.625rem 0.75rem;
+  font-size: 1rem;
+  color: var(--color-texto);
+}
+
+.input:focus {
+  outline: none;
+  border-color: var(--color-terracota);
 }
