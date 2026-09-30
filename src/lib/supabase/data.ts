@@ -1,11 +1,12 @@
 "use client";
 
-// Supabase-backed data layer: replaces the old Dexie repository. Every table
-// is RLS-scoped to auth.uid(), so queries never filter by user explicitly —
-// the database enforces that. `useTable` gives each screen a live-updating
-// array (initial fetch + a realtime subscription), which is what makes
-// "marco algo en un lado y aparece en el otro" (PRODUCT.md) actually true
-// across devices, not just across components on one device.
+// Supabase-backed data layer: replaces the old Dexie repository. No auth: RLS
+// is disabled and every row belongs to the same fixed user (see
+// FIXED_USER_ID below and supabase/migrations/0002_remove_auth.sql).
+// `useTable` gives each screen a live-updating array (initial fetch + a
+// realtime subscription), which is what makes "marco algo en un lado y
+// aparece en el otro" (PRODUCT.md) actually true across devices, not just
+// across components on one device.
 
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { supabase } from "./client";
@@ -332,11 +333,12 @@ export async function bloquearDia(entry: Omit<DiaBloqueado, "id">): Promise<void
   if (error) throw error;
 }
 
+// App sin autenticación: todas las filas se guardan bajo este mismo usuario
+// fijo (ver supabase/migrations/0002_remove_auth.sql).
+const FIXED_USER_ID = "a871f9ba-7331-4af8-9914-26323e0edd1f";
+
 async function currentUserId(): Promise<string> {
-  const { data } = await supabase().auth.getSession();
-  const userId = data.session?.user.id;
-  if (!userId) throw new Error("No hay sesión activa.");
-  return userId;
+  return FIXED_USER_ID;
 }
 
 export async function guardarHorasDia(fechaISO: string, horasDisponibles: number): Promise<void> {

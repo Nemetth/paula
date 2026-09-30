@@ -22,8 +22,6 @@ export function Sidebar() {
   const cobros = useCobros();
   const vencidos = clients && cobros ? cobrosVencidos(cobros, clients, new Date()).length : 0;
 
-  if (pathname === "/login") return null;
-
   return (
     <aside className="fixed left-0 top-0 z-40 hidden h-full w-[240px] flex-col border-r border-borde bg-bg-elevada px-4 py-6 lg:flex">
       <p className="mb-8 px-3 text-[1.25rem] font-semibold">Paula</p>

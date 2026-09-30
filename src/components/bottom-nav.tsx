@@ -19,8 +19,6 @@ export function BottomNav() {
   const cobros = useCobros();
   const vencidos = clients && cobros ? cobrosVencidos(cobros, clients, new Date()).length : 0;
 
-  if (pathname === "/login") return null;
-
   return (
     <nav
       className="fixed bottom-0 left-0 right-0 z-40 border-t border-borde bg-bg-elevada rounded-t-[20px] shadow-[var(--shadow-nav)] lg:hidden"
