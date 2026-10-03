@@ -69,6 +69,30 @@ export function clienteFormValuesToInput(v: ClienteFormValues) {
   };
 }
 
+type FormErrors = Partial<Record<"nombre" | "contactoWhatsapp" | "ventanaCobroFin", string>>;
+
+function validate(v: ClienteFormValues): FormErrors {
+  const errors: FormErrors = {};
+  if (!v.nombre.trim()) errors.nombre = "Ingresá el nombre del cliente.";
+  const wa = v.contactoWhatsapp.trim();
+  const esLink = /^https?:\/\//i.test(wa);
+  if (wa && !esLink && wa.replace(/\D/g, "").length < 8) {
+    errors.contactoWhatsapp = "Ingresá un número con código de área o un link de grupo.";
+  }
+  if (v.ventanaCobroInicio > v.ventanaCobroFin) {
+    errors.ventanaCobroFin = "Tiene que ser igual o posterior al día de inicio.";
+  }
+  return errors;
+}
+
+export function errorMessage(err: unknown): string {
+  if (typeof navigator !== "undefined" && !navigator.onLine) {
+    return "No hay conexión. Revisá tu internet y volvé a intentar.";
+  }
+  const msg = (err as { message?: string } | null)?.message;
+  return msg ? `No se pudo guardar: ${msg}` : "No se pudo guardar. Volvé a intentar.";
+}
+
 export function ClienteForm({
   initial,
   onSubmit,
@@ -80,6 +104,8 @@ export function ClienteForm({
 }) {
   const [values, setValues] = useState<ClienteFormValues>(() => valuesFromClient(initial));
   const [saving, setSaving] = useState(false);
+  const [errors, setErrors] = useState<FormErrors>({});
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const estimacion = useMemo(
     () => simularCarga({ volumenMensual: values.volumenMensual, diasProduccion: values.flujo.diasProduccion }),
@@ -88,6 +114,7 @@ export function ClienteForm({
 
   function set<K extends keyof ClienteFormValues>(key: K, value: ClienteFormValues[K]) {
     setValues((v) => ({ ...v, [key]: value }));
+    if (key in errors) setErrors((e) => ({ ...e, [key]: undefined }));
   }
 
   function setFlujo<K extends keyof FlujoConfig>(key: K, value: FlujoConfig[K]) {
@@ -96,10 +123,20 @@ export function ClienteForm({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!values.nombre.trim()) return;
+    if (saving) return;
+    const found = validate(values);
+    setErrors(found);
+    setSubmitError(null);
+    if (Object.keys(found).length > 0) {
+      document.getElementById(`field-${Object.keys(found)[0]}`)?.focus();
+      return;
+    }
     setSaving(true);
     try {
       await onSubmit(values);
+    } catch (err) {
+      console.error(err);
+      setSubmitError(errorMessage(err));
     } finally {
       setSaving(false);
     }
@@ -120,16 +157,19 @@ export function ClienteForm({
       </div>
 
       <Section title="Datos básicos">
-        <Field label="Nombre">
+        <Field label="Nombre" error={errors.nombre}>
           <input
-            required
+            id="field-nombre"
             value={values.nombre}
+            maxLength={80}
             onChange={(e) => set("nombre", e.target.value)}
             className="input"
+            aria-invalid={!!errors.nombre}
+            autoComplete="off"
           />
         </Field>
         <Field label="Rubro">
-          <input value={values.rubro} onChange={(e) => set("rubro", e.target.value)} className="input" />
+          <input maxLength={80} value={values.rubro} onChange={(e) => set("rubro", e.target.value)} className="input" />
         </Field>
         <Field label="Servicio">
           <select
@@ -142,8 +182,11 @@ export function ClienteForm({
             <option value="ambos">Contenido + Ads</option>
           </select>
         </Field>
-        <Field label="WhatsApp (número o link de grupo)">
+        <Field label="WhatsApp (número o link de grupo)" error={errors.contactoWhatsapp}>
           <input
+            id="field-contactoWhatsapp"
+            aria-invalid={!!errors.contactoWhatsapp}
+            inputMode="tel"
             value={values.contactoWhatsapp}
             onChange={(e) => set("contactoWhatsapp", e.target.value)}
             className="input"
@@ -309,6 +352,7 @@ export function ClienteForm({
         <div className="grid grid-cols-2 gap-3">
           <Field label="Cobro desde el día">
             <input
+              id="field-ventanaCobroInicio"
               type="number"
               min={1}
               max={31}
@@ -317,8 +361,10 @@ export function ClienteForm({
               className="input"
             />
           </Field>
-          <Field label="hasta el día">
+          <Field label="hasta el día" error={errors.ventanaCobroFin}>
             <input
+              id="field-ventanaCobroFin"
+              aria-invalid={!!errors.ventanaCobroFin}
               type="number"
               min={1}
               max={31}
@@ -348,6 +394,15 @@ export function ClienteForm({
         />
       </Section>
 
+      {(Object.keys(errors).length > 0 || submitError) && (
+        <div
+          role="alert"
+          className="rounded-[12px] border border-[var(--color-error)] px-4 py-3 text-[0.875rem] text-[var(--color-error)]"
+        >
+          {submitError ?? "Revisá los campos marcados antes de guardar."}
+        </div>
+      )}
+
       <button
         type="submit"
         disabled={saving}
@@ -368,11 +423,12 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({ label, error, children }: { label: string; error?: string; children: React.ReactNode }) {
   return (
     <label className="flex flex-col gap-1">
       <span className="text-[0.8125rem] font-medium text-texto-secundario">{label}</span>
       {children}
+      {error && <span className="text-[0.8125rem] text-[var(--color-error)]">{error}</span>}
     </label>
   );
 }

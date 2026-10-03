@@ -4,6 +4,7 @@
   --color-terracota: #d9502d;
   --color-verde: #3f7a5c;
   --color-ambar: #c98a2e;
+  --color-error: #b3261e;
   --color-bg: #faf7f2;
   --color-bg-elevada: #fdfcfa;
   --color-texto: #211d18;
@@ -18,6 +19,7 @@
     --color-terracota: #e8693f;
     --color-verde: #4f9573;
     --color-ambar: #d9a24e;
+    --color-error: #f2877e;
     --color-bg: #1b1712;
     --color-bg-elevada: #221d17;
     --color-texto: #f5f0e6;
@@ -67,6 +69,10 @@ body {
   padding: 0.625rem 0.75rem;
   font-size: 1rem;
   color: var(--color-texto);
+}
+
+.input[aria-invalid="true"] {
+  border-color: var(--color-error);
 }
 
 .input:focus {

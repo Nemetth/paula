@@ -5,7 +5,7 @@ import Link from "next/link";
 import { ArrowLeft, Pencil, Trash2, Video, MessageCircle } from "lucide-react";
 import { useState } from "react";
 import { actualizarCliente, eliminarCliente, useBlockedDates, useClients } from "@/lib/supabase/data";
-import { ClienteForm, clienteFormValuesToInput } from "@/components/cliente-form";
+import { ClienteForm, clienteFormValuesToInput, errorMessage } from "@/components/cliente-form";
 import { activeCicloInstancia } from "@/lib/domain/schedule-engine";
 import { FlowStage } from "@/lib/domain/types";
 import { format } from "date-fns";
@@ -74,8 +74,13 @@ export default function ClienteDetailPage() {
         <button
           onClick={async () => {
             if (confirm(`¿Eliminar a ${cliente.nombre}? Esto borra su historial.`)) {
-              await eliminarCliente(cliente.id);
-              router.push("/clientes");
+              try {
+                await eliminarCliente(cliente.id);
+                router.push("/clientes");
+              } catch (err) {
+                console.error(err);
+                alert(errorMessage(err).replace("guardar", "eliminar"));
+              }
             }
           }}
           aria-label="Eliminar"
