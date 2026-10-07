@@ -55,9 +55,38 @@ export interface FlujoConfig {
   duracionPeriodoDias?: number;
 }
 
+/** What kind of engagement this is. Drives how its pieces are produced:
+ * - mensual: recurring monthly plan, publication period = production period shifted.
+ * - pack: one-off project/pack, no recurring period.
+ * - material-cliente: client sends the material, Paula edits or writes copies (no recording).
+ * - pedidos-diarios: ad-hoc daily requests with no plan.
+ * - ciclo-grabacion: cycle tied to the recording date instead of the month. */
+export type ClienteTipo =
+  | "mensual"
+  | "pack"
+  | "material-cliente"
+  | "pedidos-diarios"
+  | "ciclo-grabacion";
+
+export type ClienteEstado =
+  | "al-dia"
+  | "en-produccion"
+  | "esperando-aprobacion"
+  | "esperando-pago"
+  | "en-pausa";
+
 export interface Client {
   id: string;
   nombre: string;
+  tipo: ClienteTipo;
+  estado: ClienteEstado;
+  /** Never postponed by the planner (e.g. Deluxe). */
+  intocable: boolean;
+  /** Last "a fondo" Ads review (ISO date); drives the review rotation. */
+  adsUltimaRevision?: string;
+  /** Last price increase (ISO date); the next one is due every 3 months. */
+  ultimoAumento?: string;
+  notasReunion?: string;
   rubro?: string;
   servicio: Servicio;
   volumenMensual: VolumenMensual;
@@ -111,11 +140,32 @@ export interface Cobro {
 export interface EstructuraSemanal {
   horasPorDia: Record<number, number>;
   diasGrabacionHabituales: number[];
+  /** Daily fixed routines (checked off every day); their hours come off every working day's capacity. */
+  fijosDiarios?: FijoDiario[];
+  /** Fixed activities on a specific weekday (e.g. a weekly meeting). */
+  actividadesFijas?: ActividadFija[];
+  /** Hours per piece type, edited in Ajustes. Learned real hours are blended on top. */
+  tiemposPieza?: TiemposPieza;
+}
+
+export interface FijoDiario {
+  id: string;
+  nombre: string;
+  horas: number;
+}
+
+export interface ActividadFija {
+  id: string;
+  nombre: string;
+  diaSemana: number; // 0 = Sunday .. 6 = Saturday
+  horas: number;
 }
 
 export const DEFAULT_ESTRUCTURA_SEMANAL: EstructuraSemanal = {
   horasPorDia: { 0: 0, 1: 8, 2: 8, 3: 8, 4: 8, 5: 8, 6: 0 },
   diasGrabacionHabituales: [],
+  fijosDiarios: [],
+  actividadesFijas: [],
 };
 
 /** Rough default hours-per-piece, used to turn quotas into estimated hours.
@@ -125,3 +175,120 @@ export const HORAS_POR_PIEZA: Record<PieceType, number> = {
   posteo: 0.75,
   reel: 1.5,
 };
+
+// ---------------------------------------------------------------------------
+// Piece-based model. The unit of work is the piece (one historia, posteo or
+// reel), not the client's stage. Recordings are their own entity and can feed
+// several pieces across more than one publication period.
+// ---------------------------------------------------------------------------
+
+export const PIEZA_ESTADOS = [
+  "idea",
+  "aprobada",
+  "grabada",
+  "editada",
+  "entregada",
+  "programada",
+] as const;
+
+export type PiezaEstado = (typeof PIEZA_ESTADOS)[number];
+
+export interface Pieza {
+  id: string;
+  clienteId: string;
+  tipo: PieceType;
+  estado: PiezaEstado;
+  titulo?: string;
+  grabacionId?: string;
+  /** The script/shot prep for this piece is done (only meaningful while it waits for a recording). */
+  guionListo: boolean;
+  /** Publication month this piece belongs to, "yyyy-MM". Separate from when it is produced. */
+  periodoPublicacion?: string;
+  /** Scheduled publication date. */
+  fechaPublicacion?: string;
+  /** Explicit delivery date. When absent, derived from the recording (+7 days). */
+  fechaEntrega?: string;
+  /** 1 or 2: lets one delivery be split into two batches with their own date. */
+  tanda: 1 | 2;
+  horasReales?: number;
+  /** Postponed ("no llegué"): can't be worked before this date. */
+  noAntesDe?: string;
+  creadaEn: string;
+}
+
+export interface Grabacion {
+  id: string;
+  clienteId: string;
+  fecha: string; // ISO date
+  /** Full days blocked before / after for travel. */
+  viajeDiasAntes: number;
+  viajeDiasDespues: number;
+  hecha: boolean;
+  guiones?: string;
+  tomas: string[];
+  /** Publication periods ("yyyy-MM") or pack names this recording feeds. */
+  alimenta: string[];
+  notas?: string;
+}
+
+/** Days after a recording by which its pieces are delivered. */
+export const ENTREGA_DIAS_POST_GRABACION = 7;
+
+/** Hours per piece, split by the kind of work. */
+export interface TiempoPieza {
+  edicion: number;
+  guion: number;
+}
+
+export type TiemposPieza = Record<PieceType, TiempoPieza>;
+
+export const DEFAULT_TIEMPOS_PIEZA: TiemposPieza = {
+  historia: { edicion: HORAS_POR_PIEZA.historia, guion: 0.1 },
+  posteo: { edicion: HORAS_POR_PIEZA.posteo, guion: 0.25 },
+  reel: { edicion: HORAS_POR_PIEZA.reel, guion: 0.4 },
+};
+
+export interface Idea {
+  id: string;
+  clienteId: string;
+  texto: string;
+  usada: boolean;
+  creadaEn: string;
+}
+
+export type AdsEstado = "ok" | "revisar";
+
+export interface AdsChequeo {
+  id: string;
+  clienteId: string;
+  fecha: string;
+  estado: AdsEstado;
+  nota?: string;
+}
+
+export type AdsReporteEstado = "pendiente" | "enviado";
+
+export interface AdsReporte {
+  id: string;
+  clienteId: string;
+  periodo: string; // yyyy-MM covered
+  estado: AdsReporteEstado;
+}
+
+export interface Gasto {
+  id: string;
+  fecha: string;
+  concepto: string;
+  monto: number;
+}
+
+/** A loose task added with the "+" button. */
+export interface Tarea {
+  id: string;
+  titulo: string;
+  horas: number;
+  fechaLimite?: string;
+  clienteId?: string;
+  hecha: boolean;
+  creadaEn: string;
+}

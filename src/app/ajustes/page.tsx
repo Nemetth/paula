@@ -2,9 +2,9 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, X } from "lucide-react";
 import { guardarEstructuraSemanal, useEstructuraSemanal } from "@/lib/supabase/data";
-import { DEFAULT_ESTRUCTURA_SEMANAL, EstructuraSemanal } from "@/lib/domain/types";
+import { DEFAULT_ESTRUCTURA_SEMANAL, DEFAULT_TIEMPOS_PIEZA, EstructuraSemanal, FijoDiario, PieceType, TiemposPieza } from "@/lib/domain/types";
 
 const DIAS: { valor: number; label: string }[] = [
   { valor: 1, label: "Lunes" },
@@ -41,11 +41,31 @@ export default function AjustesPage() {
     setGuardado(false);
   }
 
+  const fijos = estructura.fijosDiarios ?? [];
+  const tiempos: TiemposPieza = estructura.tiemposPieza ?? DEFAULT_TIEMPOS_PIEZA;
+
+  function setTiempo(tipo: PieceType, campo: "edicion" | "guion", horas: number) {
+    setEditada({ ...estructura, tiemposPieza: { ...tiempos, [tipo]: { ...tiempos[tipo], [campo]: horas } } });
+    setGuardado(false);
+  }
+
+  function setFijos(next: FijoDiario[]) {
+    setEditada({ ...estructura, fijosDiarios: next });
+    setGuardado(false);
+  }
+
+  function agregarFijo() {
+    setFijos([...fijos, { id: crypto.randomUUID(), nombre: "", horas: 0.5 }]);
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
     try {
-      await guardarEstructuraSemanal(estructura);
+      await guardarEstructuraSemanal({
+        ...estructura,
+        fijosDiarios: (estructura.fijosDiarios ?? []).filter((f) => f.nombre.trim()),
+      });
       setGuardado(true);
     } finally {
       setSaving(false);
@@ -65,8 +85,8 @@ export default function AjustesPage() {
         <section>
           <h2 className="mb-1 text-[0.9375rem] font-semibold">Tu semana</h2>
           <p className="mb-3 text-[0.8125rem] text-texto-secundario">
-            Cuántas horas tenés libres cada día y cuáles son tus días de grabación habituales — esto es lo
-            que usa el plan de hoy para saber cuánto entra.
+            Cuántas horas trabajás cada día y cuáles son tus días de grabación habituales. A esto se le
+            restan los fijos de todos los días para saber cuántas horas libres quedan para producir.
           </p>
           <ul className="flex flex-col divide-y divide-borde border-y border-borde">
             {DIAS.map(({ valor, label }) => (
@@ -95,6 +115,95 @@ export default function AjustesPage() {
               </li>
             ))}
           </ul>
+        </section>
+
+        <section>
+          <h2 className="mb-1 text-[0.9375rem] font-semibold">Tiempos por tipo de pieza</h2>
+          <p className="mb-3 text-[0.8125rem] text-texto-secundario">
+            Cuánto tardás en cada una. Son el punto de partida: a medida que cargás horas reales en las piezas, la
+            app ajusta sola el tiempo de edición.
+          </p>
+          <ul className="flex flex-col divide-y divide-borde border-y border-borde">
+            {(["historia", "posteo", "reel"] as PieceType[]).map((tipo) => (
+              <li key={tipo} className="flex flex-wrap items-center gap-3 px-2 py-3">
+                <span className="w-20 shrink-0 text-[0.9375rem] font-medium capitalize">{tipo}</span>
+                <label className="flex items-center gap-2 text-[0.8125rem] text-texto-secundario">
+                  Edición
+                  <input
+                    type="number"
+                    min={0.05}
+                    step={0.05}
+                    value={tiempos[tipo].edicion}
+                    onChange={(ev) => setTiempo(tipo, "edicion", Number(ev.target.value))}
+                    className="input w-20"
+                  />
+                  h
+                </label>
+                <label className="flex items-center gap-2 text-[0.8125rem] text-texto-secundario">
+                  Guion
+                  <input
+                    type="number"
+                    min={0.05}
+                    step={0.05}
+                    value={tiempos[tipo].guion}
+                    onChange={(ev) => setTiempo(tipo, "guion", Number(ev.target.value))}
+                    className="input w-20"
+                  />
+                  h
+                </label>
+              </li>
+            ))}
+          </ul>
+        </section>
+
+        <section>
+          <h2 className="mb-1 text-[0.9375rem] font-semibold">Fijos de todos los días</h2>
+          <p className="mb-3 text-[0.8125rem] text-texto-secundario">
+            Lo que hacés cada día sin falta (revisar cuentas, responder mensajes). Se tildan en Hoy, descuentan
+            horas de cada día laboral y nunca se mueven.
+          </p>
+          {fijos.length > 0 && (
+            <ul className="mb-3 flex flex-col divide-y divide-borde border-y border-borde">
+              {fijos.map((f) => (
+                <li key={f.id} className="flex items-center gap-3 px-2 py-3">
+                  <input
+                    type="text"
+                    value={f.nombre}
+                    placeholder="Nombre"
+                    onChange={(ev) => setFijos(fijos.map((x) => (x.id === f.id ? { ...x, nombre: ev.target.value } : x)))}
+                    className="input min-w-0 flex-1"
+                    aria-label="Nombre del fijo"
+                  />
+                  <input
+                    type="number"
+                    min={0}
+                    max={8}
+                    step={0.25}
+                    value={f.horas}
+                    onChange={(ev) => setFijos(fijos.map((x) => (x.id === f.id ? { ...x, horas: Number(ev.target.value) } : x)))}
+                    className="input w-20"
+                    aria-label={`Horas de ${f.nombre || "fijo"}`}
+                  />
+                  <span className="text-[0.8125rem] text-texto-secundario">h</span>
+                  <button
+                    type="button"
+                    onClick={() => setFijos(fijos.filter((x) => x.id !== f.id))}
+                    aria-label="Quitar fijo"
+                    className="text-texto-secundario"
+                  >
+                    <X size={18} />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          <button
+            type="button"
+            onClick={agregarFijo}
+            className="rounded-[12px] border border-borde px-4 py-2.5 text-[0.9375rem] font-medium"
+          >
+            Agregar fijo
+          </button>
         </section>
 
         <button

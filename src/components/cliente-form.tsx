@@ -1,7 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Client, CicloTipo, FlujoConfig, Servicio, VolumenMensual } from "@/lib/domain/types";
+import { Client, CicloTipo, ClienteEstado, ClienteTipo, FlujoConfig, Servicio, VolumenMensual } from "@/lib/domain/types";
+import { ESTADO_CLIENTE_LABEL, TIPO_CLIENTE_LABEL } from "@/lib/domain/labels";
 import { DEFAULT_FLUJO } from "@/lib/supabase/data";
 import { simularCarga } from "@/lib/domain/schedule-engine";
 
@@ -9,6 +10,9 @@ export interface ClienteFormValues {
   nombre: string;
   rubro: string;
   servicio: Servicio;
+  tipo: ClienteTipo;
+  estado: ClienteEstado;
+  intocable: boolean;
   volumenMensual: VolumenMensual;
   flujo: FlujoConfig;
   contactoWhatsapp: string;
@@ -32,6 +36,9 @@ function valuesFromClient(c?: Client): ClienteFormValues {
       nombre: "",
       rubro: "",
       servicio: "contenido",
+      tipo: "mensual",
+      estado: "en-produccion",
+      intocable: false,
       volumenMensual: { historias: 0, posteos: 0, reels: 0 },
       flujo: { ...DEFAULT_FLUJO },
       contactoWhatsapp: "",
@@ -45,6 +52,9 @@ function valuesFromClient(c?: Client): ClienteFormValues {
     nombre: c.nombre,
     rubro: c.rubro ?? "",
     servicio: c.servicio,
+    tipo: c.tipo,
+    estado: c.estado,
+    intocable: c.intocable,
     volumenMensual: c.volumenMensual,
     flujo: c.flujo,
     contactoWhatsapp: c.contactoWhatsapp ?? "",
@@ -60,6 +70,9 @@ export function clienteFormValuesToInput(v: ClienteFormValues) {
     nombre: v.nombre.trim(),
     rubro: v.rubro.trim() || undefined,
     servicio: v.servicio,
+    tipo: v.tipo,
+    estado: v.estado,
+    intocable: v.intocable,
     volumenMensual: v.volumenMensual,
     flujo: v.flujo,
     contactoWhatsapp: v.contactoWhatsapp.trim() || undefined,
@@ -182,6 +195,33 @@ export function ClienteForm({
             <option value="ambos">Contenido + Ads</option>
           </select>
         </Field>
+        <Field label="Tipo de cliente">
+          <select value={values.tipo} onChange={(e) => set("tipo", e.target.value as ClienteTipo)} className="input">
+            {(Object.keys(TIPO_CLIENTE_LABEL) as ClienteTipo[]).map((t) => (
+              <option key={t} value={t}>
+                {TIPO_CLIENTE_LABEL[t]}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field label="Estado">
+          <select value={values.estado} onChange={(e) => set("estado", e.target.value as ClienteEstado)} className="input">
+            {(Object.keys(ESTADO_CLIENTE_LABEL) as ClienteEstado[]).map((t) => (
+              <option key={t} value={t}>
+                {ESTADO_CLIENTE_LABEL[t]}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <label className="flex items-center gap-2 text-[0.9375rem]">
+          <input
+            type="checkbox"
+            checked={values.intocable}
+            onChange={(e) => set("intocable", e.target.checked)}
+            className="h-[16px] w-[16px] accent-[var(--color-terracota)]"
+          />
+          Intocable: su trabajo nunca se posterga
+        </label>
         <Field label="WhatsApp (número o link de grupo)" error={errors.contactoWhatsapp}>
           <input
             id="field-contactoWhatsapp"

@@ -2,32 +2,43 @@
 
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Pencil, Trash2, Video, MessageCircle } from "lucide-react";
-import { useState } from "react";
-import { actualizarCliente, eliminarCliente, useBlockedDates, useClients } from "@/lib/supabase/data";
+import { ArrowLeft, Pencil, Trash2, MessageCircle } from "lucide-react";
+import { useMemo, useState } from "react";
+import {
+  actualizarCliente,
+  eliminarCliente,
+  useAdsChequeos,
+  useClients,
+  useCobros,
+  useGrabaciones,
+  useIdeas,
+  usePiezas,
+} from "@/lib/supabase/data";
 import { ClienteForm, clienteFormValuesToInput, errorMessage } from "@/components/cliente-form";
-import { activeCicloInstancia } from "@/lib/domain/schedule-engine";
-import { FlowStage } from "@/lib/domain/types";
-import { format } from "date-fns";
-import { es } from "date-fns/locale";
-
-const STAGE_LABEL: Record<FlowStage, string> = {
-  calendario: "Calendario",
-  aprobacion: "Aprobación",
-  grabacion: "Grabación",
-  produccion: "Producción",
-  presentacion: "Presentación",
-  correccion: "Corrección",
-  ajustes: "Ajustes",
-  programacion: "Programación",
-};
+import { SeccionCiclo, SeccionGrabaciones, SeccionPiezas } from "@/components/ficha/piezas-grabaciones";
+import {
+  SeccionAds,
+  SeccionHistorial,
+  SeccionIdeas,
+  SeccionMensajes,
+  SeccionReunion,
+} from "@/components/ficha/otras";
+import { toISODate } from "@/lib/domain/dates";
+import { ESTADO_CLIENTE_LABEL, TIPO_CLIENTE_LABEL } from "@/lib/domain/labels";
+import { ClienteEstado } from "@/lib/domain/types";
 
 export default function ClienteDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const [editando, setEditando] = useState(false);
+  const hoyISO = useMemo(() => toISODate(new Date()), []);
+
   const clients = useClients();
-  const blockedDates = useBlockedDates();
+  const todasLasPiezas = usePiezas();
+  const todasLasGrabaciones = useGrabaciones();
+  const ideas = useIdeas();
+  const chequeos = useAdsChequeos();
+  const cobros = useCobros();
   const cliente = clients?.find((c) => c.id === id);
 
   if (clients === undefined) return <div className="px-4 py-8 text-texto-secundario">Cargando...</div>;
@@ -35,8 +46,8 @@ export default function ClienteDetailPage() {
     return <div className="px-4 py-8 text-texto-secundario">No se encontró el cliente.</div>;
   }
 
-  const blockedSet = new Set((blockedDates ?? []).filter((b) => b.clienteId === id).map((b) => b.fecha));
-  const ciclo = activeCicloInstancia(cliente, new Date(), blockedSet);
+  const piezas = (todasLasPiezas ?? []).filter((p) => p.clienteId === id);
+  const grabaciones = (todasLasGrabaciones ?? []).filter((g) => g.clienteId === id);
 
   if (editando) {
     return (
@@ -67,7 +78,7 @@ export default function ClienteDetailPage() {
         <Link href="/clientes" aria-label="Volver" className="text-texto-secundario">
           <ArrowLeft size={20} />
         </Link>
-        <h1 className="flex-1 text-[1.25rem] font-semibold truncate">{cliente.nombre}</h1>
+        <h1 className="flex-1 truncate text-[1.25rem] font-semibold">{cliente.nombre}</h1>
         <button onClick={() => setEditando(true)} aria-label="Editar" className="text-texto-secundario">
           <Pencil size={19} />
         </button>
@@ -91,72 +102,69 @@ export default function ClienteDetailPage() {
       </header>
 
       <div className="lg:rounded-[12px] lg:border lg:border-borde lg:bg-bg-elevada lg:p-8">
-      <div className="mb-5 flex flex-wrap items-center gap-2">
-        <Pill>{cliente.servicio === "ambos" ? "Contenido + Ads" : cliente.servicio === "ads" ? "Solo Ads" : "Contenido"}</Pill>
-        {!cliente.activo && <Pill tone="ambar">Pausado</Pill>}
-        {cliente.contactoWhatsapp && (
-          <a
-            href={`https://wa.me/${cliente.contactoWhatsapp.replace(/[^\d]/g, "")}`}
-            target="_blank"
-            rel="noreferrer"
-            className="flex items-center gap-1 text-[0.8125rem] font-medium text-verde"
+        <div className="mb-6 flex flex-wrap items-center gap-2">
+          <select
+            value={cliente.estado}
+            onChange={(e) => actualizarCliente(cliente.id, { estado: e.target.value as ClienteEstado })}
+            aria-label="Estado del cliente"
+            className="rounded-[8px] border border-borde bg-bg-elevada px-2 py-1 text-[0.8125rem] font-medium"
           >
-            <MessageCircle size={14} /> WhatsApp
-          </a>
+            {(Object.keys(ESTADO_CLIENTE_LABEL) as ClienteEstado[]).map((e) => (
+              <option key={e} value={e}>
+                {ESTADO_CLIENTE_LABEL[e]}
+              </option>
+            ))}
+          </select>
+          <span className="rounded-[8px] bg-borde/60 px-2 py-1 text-[0.8125rem] font-medium text-texto-secundario">
+            {TIPO_CLIENTE_LABEL[cliente.tipo]}
+          </span>
+          {cliente.intocable && (
+            <span className="rounded-[8px] bg-ambar/15 px-2 py-1 text-[0.8125rem] font-medium text-ambar">Intocable</span>
+          )}
+          {!cliente.activo && (
+            <span className="rounded-[8px] bg-ambar/15 px-2 py-1 text-[0.8125rem] font-medium text-ambar">Pausado</span>
+          )}
+          {cliente.contactoWhatsapp && (
+            <a
+              href={
+                /^https?:\/\//i.test(cliente.contactoWhatsapp)
+                  ? cliente.contactoWhatsapp
+                  : `https://wa.me/${cliente.contactoWhatsapp.replace(/[^\d]/g, "")}`
+              }
+              target="_blank"
+              rel="noreferrer"
+              className="flex items-center gap-1 text-[0.8125rem] font-medium text-verde"
+            >
+              <MessageCircle size={14} /> WhatsApp
+            </a>
+          )}
+        </div>
+
+        {cliente.servicio !== "ads" && (
+          <>
+            <SeccionCiclo
+              piezas={piezas}
+              grabaciones={grabaciones}
+              cliente={cliente}
+              todasLasPiezas={todasLasPiezas ?? []}
+            />
+            <SeccionPiezas cliente={cliente} piezas={piezas} grabaciones={grabaciones} />
+            <SeccionGrabaciones cliente={cliente} grabaciones={grabaciones} piezas={piezas} />
+          </>
+        )}
+        <SeccionAds cliente={cliente} chequeos={chequeos ?? []} hoyISO={hoyISO} />
+        {cliente.servicio !== "ads" && <SeccionIdeas cliente={cliente} ideas={ideas ?? []} />}
+        <SeccionReunion cliente={cliente} piezas={piezas} grabaciones={grabaciones} cobros={cobros ?? []} />
+        {cliente.servicio !== "ads" && <SeccionHistorial piezas={piezas} grabaciones={grabaciones} />}
+        <SeccionMensajes cliente={cliente} grabaciones={grabaciones} hoyISO={hoyISO} />
+
+        {cliente.notas && (
+          <section className="mb-6">
+            <h2 className="mb-2 text-[0.9375rem] font-semibold">Notas</h2>
+            <p className="text-[0.9375rem] text-texto-secundario">{cliente.notas}</p>
+          </section>
         )}
       </div>
-
-      {cliente.servicio !== "ads" && (
-        <section className="mb-6">
-          <h2 className="mb-2 text-[0.9375rem] font-semibold">Volumen mensual</h2>
-          <div className="flex gap-4 text-[0.9375rem] text-texto-secundario">
-            <span>{cliente.volumenMensual.historias} historias</span>
-            <span>{cliente.volumenMensual.posteos} posteos</span>
-            <span>{cliente.volumenMensual.reels} reels</span>
-          </div>
-        </section>
-      )}
-
-      {ciclo && (
-        <section className="mb-6">
-          <h2 className="mb-2 text-[0.9375rem] font-semibold">Ciclo actual ({ciclo.periodo})</h2>
-          <ul className="flex flex-col divide-y divide-borde border-y border-borde">
-            {ciclo.ventanas.map((v) => (
-              <li key={v.etapa} className="flex items-center justify-between px-2 py-2.5">
-                <span className="flex items-center gap-1.5 text-[0.9375rem]">
-                  {v.etapa === "grabacion" && <Video size={14} className="text-texto-secundario" />}
-                  {STAGE_LABEL[v.etapa]}
-                </span>
-                <span className="text-[0.8125rem] text-texto-secundario">
-                  {format(v.inicio, "d MMM", { locale: es })} – {format(v.fin, "d MMM", { locale: es })}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-
-      {cliente.notas && (
-        <section className="mb-6">
-          <h2 className="mb-2 text-[0.9375rem] font-semibold">Notas</h2>
-          <p className="text-[0.9375rem] text-texto-secundario">{cliente.notas}</p>
-        </section>
-      )}
-      </div>
     </div>
-  );
-}
-
-function Pill({ children, tone = "neutral" }: { children: React.ReactNode; tone?: "neutral" | "ambar" }) {
-  return (
-    <span
-      className={
-        tone === "ambar"
-          ? "rounded-[8px] bg-ambar/15 px-2 py-1 text-[0.8125rem] font-medium text-ambar"
-          : "rounded-[8px] bg-borde/60 px-2 py-1 text-[0.8125rem] font-medium text-texto-secundario"
-      }
-    >
-      {children}
-    </span>
   );
 }

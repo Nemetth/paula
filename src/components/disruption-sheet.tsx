@@ -1,183 +1,252 @@
 "use client";
 
 import { useState } from "react";
-import { X } from "lucide-react";
-import { bloquearDia, guardarHorasDia } from "@/lib/supabase/data";
-import { Client } from "@/lib/domain/types";
-import { cn } from "@/lib/utils";
+import { addDays } from "date-fns";
+import {
+  actualizarCliente,
+  actualizarGrabacion,
+  actualizarPieza,
+  bloquearDia,
+  guardarHorasDia,
+} from "@/lib/supabase/data";
+import { fromISODate, toISODate } from "@/lib/domain/dates";
+import { Asignacion } from "@/lib/domain/planner";
+import { completarUnidad } from "@/lib/domain/completar";
+import { Client, Grabacion } from "@/lib/domain/types";
+import { BotonPrimario, OpcionSheet, Sheet } from "@/components/sheet";
 
-type Paso = "menu" | "no-trabaje" | "grabacion" | "horas";
+type Paso = "menu" | "no-llegue" | "adelante" | "cliente-frenado" | "grabacion" | "no-trabajo" | "horas";
+
+const campo = "rounded-[12px] border border-borde bg-bg-elevada px-3 py-2.5";
+const etiquetaCampo = "text-[0.8125rem] font-medium text-texto-secundario";
 
 export function DisruptionSheet({
   open,
   onClose,
   clients,
   today,
+  tareasHoy,
+  tareasProximas,
+  grabacionesPendientes,
 }: {
   open: boolean;
   onClose: () => void;
   clients: Client[];
   today: string;
+  /** Today's tasks: "no llegué a X" picks from these. */
+  tareasHoy: Asignacion[];
+  /** Upcoming tasks: "adelanté X" picks from these. */
+  tareasProximas: Asignacion[];
+  grabacionesPendientes: Grabacion[];
 }) {
   const [paso, setPaso] = useState<Paso>("menu");
-  const [clienteId, setClienteId] = useState<string>(clients[0]?.id ?? "");
+  const [seleccion, setSeleccion] = useState("");
   const [fecha, setFecha] = useState(today);
   const [horas, setHoras] = useState(4);
   const [confirmado, setConfirmado] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  function reset() {
+  function cerrar() {
+    onClose();
     setPaso("menu");
     setConfirmado(null);
+    setError(null);
+    setSeleccion("");
   }
 
-  async function noTrabajeHoy() {
-    await Promise.all(
-      clients.map((c) => bloquearDia({ clienteId: c.id, fecha: today, motivo: "no-trabaje" })),
-    );
-    setConfirmado("Marcado — el plan de los próximos días se reorganiza solo.");
+  async function ejecutar(accion: () => Promise<void>, mensaje: string) {
+    setError(null);
+    try {
+      await accion();
+      setConfirmado(mensaje);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "No se pudo guardar. Probá de nuevo.");
+    }
   }
 
-  async function grabacionMovida() {
-    if (!clienteId) return;
-    await bloquearDia({ clienteId, fecha, motivo: "grabacion" });
-    setConfirmado("Listo — el resto del ciclo de ese cliente se recalcula.");
-  }
-
-  async function guardarHoras() {
-    await guardarHorasDia(today, horas);
-    setConfirmado("Actualizado — hoy vas a ver menos tareas.");
-  }
-
-  if (!open) return null;
+  const manana = toISODate(addDays(fromISODate(today), 1));
+  const nombreCliente = new Map(clients.map((c) => [c.id, c.nombre]));
+  const etiqueta = (a: Asignacion) =>
+    `${nombreCliente.get(a.unidad.clienteId ?? "") ?? ""} · ${a.unidad.etiqueta} (${a.unidad.horas} h)`;
+  const movibles = tareasHoy.filter((t) => t.unidad.piezaId);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center">
-      <button
-        aria-label="Cerrar"
-        className="absolute inset-0"
-        style={{ background: "color-mix(in oklab, var(--color-texto) 35%, transparent)" }}
-        onClick={() => {
-          onClose();
-          reset();
-        }}
-      />
-      <div className="relative z-10 w-full max-w-[640px] rounded-t-[20px] bg-bg-elevada px-5 pb-8 pt-4 shadow-[var(--shadow-sheet)]"
-        style={{ paddingBottom: "calc(2rem + env(safe-area-inset-bottom, 0px))" }}
-      >
-        <div className="mb-3 flex items-center justify-between">
-          <p className="font-semibold">Algo cambió</p>
-          <button
-            onClick={() => {
-              onClose();
-              reset();
-            }}
-            aria-label="Cerrar"
-            className="text-texto-secundario"
-          >
-            <X size={20} />
-          </button>
+    <Sheet open={open} title="Algo cambió" onClose={cerrar}>
+      {confirmado ? (
+        <div>
+          <p className="text-[0.9375rem]">{confirmado}</p>
+          <BotonPrimario onClick={cerrar}>Listo</BotonPrimario>
         </div>
-
-        {confirmado ? (
-          <div>
-            <p className="text-[0.9375rem]">{confirmado}</p>
-            <button
-              onClick={() => {
-                onClose();
-                reset();
-              }}
-              className="mt-4 w-full rounded-[12px] bg-terracota px-5 py-3 text-center font-medium text-bg"
-            >
-              Listo
-            </button>
-          </div>
-        ) : paso === "menu" ? (
-          <div className="flex flex-col gap-2">
-            <OpcionSheet onClick={() => setPaso("no-trabaje")}>No trabajé hoy</OpcionSheet>
-            <OpcionSheet onClick={() => setPaso("grabacion")}>Se corrió una grabación</OpcionSheet>
-            <OpcionSheet onClick={() => setPaso("horas")}>Empecé más tarde / menos horas hoy</OpcionSheet>
-          </div>
-        ) : paso === "no-trabaje" ? (
-          <div>
-            <p className="text-[0.9375rem] text-texto-secundario">
-              Vamos a marcar hoy como no trabajado para todos tus clientes activos. Lo pendiente se reparte
-              solo en los próximos días hábiles.
-            </p>
-            <button
-              onClick={noTrabajeHoy}
-              className="mt-4 w-full rounded-[12px] bg-terracota px-5 py-3 text-center font-medium text-bg"
-            >
-              Confirmar
-            </button>
-          </div>
-        ) : paso === "grabacion" ? (
-          <div className="flex flex-col gap-3">
-            <label className="flex flex-col gap-1">
-              <span className="text-[0.8125rem] font-medium text-texto-secundario">Cliente</span>
-              <select
-                value={clienteId}
-                onChange={(e) => setClienteId(e.target.value)}
-                className="rounded-[12px] border border-borde bg-bg-elevada px-3 py-2.5"
+      ) : paso === "menu" ? (
+        <div className="flex flex-col gap-2">
+          <OpcionSheet onClick={() => setPaso("no-llegue")}>No llegué a algo de hoy</OpcionSheet>
+          <OpcionSheet onClick={() => setPaso("adelante")}>Adelanté algo</OpcionSheet>
+          <OpcionSheet onClick={() => setPaso("cliente-frenado")}>Un cliente está frenado</OpcionSheet>
+          <OpcionSheet onClick={() => setPaso("grabacion")}>Se corrió una grabación</OpcionSheet>
+          <OpcionSheet onClick={() => setPaso("horas")}>Hoy tengo menos horas</OpcionSheet>
+          <OpcionSheet onClick={() => setPaso("no-trabajo")}>Hoy no trabajo</OpcionSheet>
+        </div>
+      ) : paso === "no-llegue" ? (
+        <div className="flex flex-col gap-3">
+          {movibles.length === 0 ? (
+            <p className="text-[0.9375rem] text-texto-secundario">No hay tareas de hoy para mover.</p>
+          ) : (
+            <>
+              <label className="flex flex-col gap-1">
+                <span className={etiquetaCampo}>¿A cuál no llegaste?</span>
+                <select value={seleccion} onChange={(e) => setSeleccion(e.target.value)} className={campo}>
+                  <option value="">Elegí una tarea</option>
+                  {movibles.map((t) => (
+                    <option key={t.unidad.id} value={t.unidad.id}>
+                      {etiqueta(t)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <p className="text-[0.8125rem] text-texto-secundario">Pasa a mañana y el resto del plan se acomoda solo.</p>
+              <BotonPrimario
+                disabled={!seleccion}
+                onClick={() =>
+                  ejecutar(async () => {
+                    const piezaId = movibles.find((t) => t.unidad.id === seleccion)?.unidad.piezaId;
+                    if (piezaId) await actualizarPieza(piezaId, { noAntesDe: manana });
+                  }, "Movida a mañana: el plan se reacomodó.")
+                }
               >
-                {clients.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.nombre}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="flex flex-col gap-1">
-              <span className="text-[0.8125rem] font-medium text-texto-secundario">Nueva fecha de grabación</span>
-              <input
-                type="date"
-                value={fecha}
-                onChange={(e) => setFecha(e.target.value)}
-                className="rounded-[12px] border border-borde bg-bg-elevada px-3 py-2.5"
-              />
-            </label>
-            <button
-              onClick={grabacionMovida}
-              className="mt-1 w-full rounded-[12px] bg-terracota px-5 py-3 text-center font-medium text-bg"
-            >
-              Confirmar
-            </button>
-          </div>
-        ) : (
-          <div className="flex flex-col gap-3">
-            <label className="flex flex-col gap-1">
-              <span className="text-[0.8125rem] font-medium text-texto-secundario">Horas disponibles hoy</span>
-              <input
-                type="number"
-                min={0}
-                max={12}
-                step={0.5}
-                value={horas}
-                onChange={(e) => setHoras(Number(e.target.value))}
-                className="rounded-[12px] border border-borde bg-bg-elevada px-3 py-2.5"
-              />
-            </label>
-            <button
-              onClick={guardarHoras}
-              className="mt-1 w-full rounded-[12px] bg-terracota px-5 py-3 text-center font-medium text-bg"
-            >
-              Confirmar
-            </button>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function OpcionSheet({ children, onClick }: { children: React.ReactNode; onClick: () => void }) {
-  return (
-    <button
-      onClick={onClick}
-      className={cn(
-        "rounded-[12px] border border-borde px-4 py-3.5 text-left text-[0.9375rem] font-medium",
+                Confirmar
+              </BotonPrimario>
+            </>
+          )}
+        </div>
+      ) : paso === "adelante" ? (
+        <div className="flex flex-col gap-3">
+          {tareasProximas.length === 0 ? (
+            <p className="text-[0.9375rem] text-texto-secundario">No hay tareas próximas para adelantar.</p>
+          ) : (
+            <>
+              <label className="flex flex-col gap-1">
+                <span className={etiquetaCampo}>¿Qué adelantaste?</span>
+                <select value={seleccion} onChange={(e) => setSeleccion(e.target.value)} className={campo}>
+                  <option value="">Elegí una tarea</option>
+                  {tareasProximas.map((t) => (
+                    <option key={t.unidad.id} value={t.unidad.id}>
+                      {etiqueta(t)} · {t.fecha}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <BotonPrimario
+                disabled={!seleccion}
+                onClick={() =>
+                  ejecutar(async () => {
+                    const a = tareasProximas.find((t) => t.unidad.id === seleccion);
+                    if (a) await completarUnidad(a.unidad);
+                  }, "Marcada como hecha: los próximos días quedan más livianos.")
+                }
+              >
+                Confirmar
+              </BotonPrimario>
+            </>
+          )}
+        </div>
+      ) : paso === "cliente-frenado" ? (
+        <div className="flex flex-col gap-3">
+          <label className="flex flex-col gap-1">
+            <span className={etiquetaCampo}>Cliente</span>
+            <select value={seleccion} onChange={(e) => setSeleccion(e.target.value)} className={campo}>
+              <option value="">Elegí un cliente</option>
+              {clients.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.nombre}
+                </option>
+              ))}
+            </select>
+          </label>
+          <p className="text-[0.8125rem] text-texto-secundario">
+            Queda en pausa: su trabajo sale del plan hasta que lo reactives desde su ficha.
+          </p>
+          <BotonPrimario
+            disabled={!seleccion}
+            onClick={() =>
+              ejecutar(
+                () => actualizarCliente(seleccion, { estado: "en-pausa" }),
+                `${nombreCliente.get(seleccion) ?? "El cliente"} quedó en pausa: su trabajo salió del plan.`,
+              )
+            }
+          >
+            Confirmar
+          </BotonPrimario>
+        </div>
+      ) : paso === "grabacion" ? (
+        <div className="flex flex-col gap-3">
+          {grabacionesPendientes.length === 0 ? (
+            <p className="text-[0.9375rem] text-texto-secundario">No hay grabaciones pendientes.</p>
+          ) : (
+            <>
+              <label className="flex flex-col gap-1">
+                <span className={etiquetaCampo}>Grabación</span>
+                <select value={seleccion} onChange={(e) => setSeleccion(e.target.value)} className={campo}>
+                  <option value="">Elegí una grabación</option>
+                  {grabacionesPendientes.map((g) => (
+                    <option key={g.id} value={g.id}>
+                      {nombreCliente.get(g.clienteId) ?? "Cliente"} · {g.fecha}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="flex flex-col gap-1">
+                <span className={etiquetaCampo}>Nueva fecha</span>
+                <input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} className={campo} />
+              </label>
+              <p className="text-[0.8125rem] text-texto-secundario">La entrega se corre con ella (7 días después).</p>
+              <BotonPrimario
+                disabled={!seleccion || !fecha}
+                onClick={() =>
+                  ejecutar(() => actualizarGrabacion(seleccion, { fecha }), "Grabación movida: la entrega y el plan se recalcularon.")
+                }
+              >
+                Confirmar
+              </BotonPrimario>
+            </>
+          )}
+        </div>
+      ) : paso === "horas" ? (
+        <div className="flex flex-col gap-3">
+          <label className="flex flex-col gap-1">
+            <span className={etiquetaCampo}>Horas de trabajo hoy</span>
+            <input
+              type="number"
+              min={0}
+              max={12}
+              step={0.5}
+              value={horas}
+              onChange={(e) => setHoras(Number(e.target.value))}
+              className={campo}
+            />
+          </label>
+          <BotonPrimario onClick={() => ejecutar(() => guardarHorasDia(today, horas), "Actualizado: hoy vas a ver menos tareas.")}>
+            Confirmar
+          </BotonPrimario>
+        </div>
+      ) : (
+        <div>
+          <p className="text-[0.9375rem] text-texto-secundario">
+            Hoy queda sin horas y lo pendiente se reparte en los próximos días.
+          </p>
+          <BotonPrimario
+            onClick={() =>
+              ejecutar(async () => {
+                const ref = clients[0];
+                if (!ref) throw new Error("Cargá un cliente primero.");
+                await bloquearDia({ clienteId: ref.id, fecha: today, motivo: "no-trabaje" });
+              }, "Marcado: el plan de los próximos días se reorganiza solo.")
+            }
+          >
+            Confirmar
+          </BotonPrimario>
+        </div>
       )}
-    >
-      {children}
-    </button>
+      {error && <p className="mt-3 text-[0.8125rem] text-[var(--color-error)]">{error}</p>}
+    </Sheet>
   );
 }

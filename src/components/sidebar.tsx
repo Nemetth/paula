@@ -2,16 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Sun, Users, Wallet, Settings } from "lucide-react";
+import { Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { NAV_ITEMS } from "@/components/nav-items";
 import { useClients, useCobros } from "@/lib/supabase/data";
 import { cobrosVencidos } from "@/lib/domain/cobros";
 
-const ITEMS = [
-  { href: "/hoy", label: "Hoy", icon: Sun },
-  { href: "/clientes", label: "Clientes", icon: Users },
-  { href: "/plata", label: "Plata", icon: Wallet },
-];
 
 /** Desktop-only left nav — the "generic SaaS" counterpart to the mobile
  * bottom tab bar. Mobile keeps the bottom bar (see BottomNav); this never
@@ -27,7 +23,7 @@ export function Sidebar() {
       <p className="mb-8 px-3 text-[1.25rem] font-semibold">Paula</p>
 
       <nav className="flex flex-col gap-1">
-        {ITEMS.map(({ href, label, icon: Icon }) => {
+        {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
           const active = pathname === href || pathname.startsWith(`${href}/`);
           const showVencidos = href === "/plata" && vencidos > 0;
           return (

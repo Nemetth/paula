@@ -1,5 +1,6 @@
 "use client";
 
+import { AccionesGlobales } from "./acciones-globales";
 import { BottomNav } from "./bottom-nav";
 import { Sidebar } from "./sidebar";
 
@@ -9,6 +10,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
     <>
       <Sidebar />
       <main className="flex-1 pb-[calc(72px+env(safe-area-inset-bottom,0px))] lg:pb-0 lg:pl-[240px]">
+        <AccionesGlobales />
         {children}
       </main>
       <BottomNav />

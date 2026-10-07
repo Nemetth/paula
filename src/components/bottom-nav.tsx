@@ -2,16 +2,11 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Sun, Users, Wallet } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { NAV_ITEMS } from "@/components/nav-items";
 import { useClients, useCobros } from "@/lib/supabase/data";
 import { cobrosVencidos } from "@/lib/domain/cobros";
 
-const ITEMS = [
-  { href: "/hoy", label: "Hoy", icon: Sun },
-  { href: "/clientes", label: "Clientes", icon: Users },
-  { href: "/plata", label: "Plata", icon: Wallet },
-];
 
 export function BottomNav() {
   const pathname = usePathname();
@@ -26,7 +21,7 @@ export function BottomNav() {
       aria-label="Navegación principal"
     >
       <div className="mx-auto flex max-w-[640px] items-stretch justify-around px-2">
-        {ITEMS.map(({ href, label, icon: Icon }) => {
+        {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
           const active = pathname === href || pathname.startsWith(`${href}/`);
           const showVencidos = href === "/plata" && vencidos > 0;
           return (

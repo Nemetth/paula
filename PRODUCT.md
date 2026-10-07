@@ -43,11 +43,12 @@ First version (MVP) scope, confirmed:
 - **Plan del día:** a "Hoy" (today) view showing what's due today with real estimated hours per task, already paced to reach each delivery with anticipation. Reorganization when Paula falls behind or something changes is manual in this first version (she marks what happened; the app recalculates), not yet via a conversational AI assistant.
 - **Plata (básico):** cobros per client with status (pending/paid) and alerts when the cobro window is missed.
 
-Explicitly deferred to a later version:
-- Conversational AI assistant for redistributing the plan from natural-language input ("hoy no llegué a X") — the first version handles reorganization through a manual/structured update instead.
-- Meta Ads module (account records, objective-based checklists, creative-refresh alerts, monthly report reminders)
-- WhatsApp message assistance (pre-filled reminders/messages)
-- Extras: content-runout alarms, topic history, real hours-worked tracking vs. the 40h cap, month-close summaries, calendar view, idea bank, backups, Canva/Drive summarization
+Scope update (2026-10-07, after Paula's revised brief): the unit of work is now the **piece** (idea → aprobada → grabada → editada → entregada → programada), not the client stage, and recordings are their own entity (7-day delivery, travel days block the calendar). One global planner (`src/lib/domain/planner.ts`) spreads all pieces across Paula's free hours; nothing stores "the plan". This pulled the following in from the deferred list, all built: calendar (week/month), Ads module (daily check, deep-review rotation, monthly reports), idea bank, month-close summary, real hours per piece feeding the time estimates, content-runout alerts, pre-filled WhatsApp messages surfaced in Hoy, loose tasks ("+") and an alerts bell. Navigation is Hoy · Calendario · Clientes · Ads · Plata, with Ajustes on the gear.
+
+Still deferred:
+- Conversational AI assistant for redistributing the plan from natural-language input — reorganization is handled by the structured "Algo cambió" sheet.
+- Integrations: Google Calendar, Instagram (published content, to avoid repeating ideas), Canva/presentation links, backup.
+- Special dates per rubro in the calendar (needs a source Paula provides).
 
 Technical constraints:
 - Must work on mobile and desktop, synced (an edit on one appears on the other); mobile is the primary surface.

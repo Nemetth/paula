@@ -11,7 +11,13 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { supabase } from "./client";
 import {
+  AdsChequeo,
+  AdsEstado,
+  AdsReporte,
+  AdsReporteEstado,
   Client,
+  ClienteEstado,
+  ClienteTipo,
   Cobro,
   CobroEstado,
   DEFAULT_ESTRUCTURA_SEMANAL,
@@ -19,7 +25,13 @@ import {
   EstructuraSemanal,
   FlujoConfig,
   FlowStage,
+  Gasto,
+  Grabacion,
+  Idea,
   PieceType,
+  Tarea,
+  Pieza,
+  PiezaEstado,
   RegistroTrabajo,
   Servicio,
   VolumenMensual,
@@ -30,6 +42,12 @@ import {
 type ClientRow = {
   id: string;
   nombre: string;
+  tipo: ClienteTipo | null;
+  estado: ClienteEstado | null;
+  intocable: boolean | null;
+  ads_ultima_revision: string | null;
+  ultimo_aumento: string | null;
+  notas_reunion: string | null;
   rubro: string | null;
   servicio: Servicio;
   volumen_mensual: VolumenMensual;
@@ -46,6 +64,12 @@ function rowToClient(r: ClientRow): Client {
   return {
     id: r.id,
     nombre: r.nombre,
+    tipo: r.tipo ?? "mensual",
+    estado: r.estado ?? "al-dia",
+    intocable: r.intocable ?? false,
+    adsUltimaRevision: r.ads_ultima_revision ?? undefined,
+    ultimoAumento: r.ultimo_aumento ?? undefined,
+    notasReunion: r.notas_reunion ?? undefined,
     rubro: r.rubro ?? undefined,
     servicio: r.servicio,
     volumenMensual: r.volumen_mensual,
@@ -105,6 +129,82 @@ function rowToCobro(r: CobroRow): Cobro {
     fechaPago: r.fecha_pago ?? undefined,
   };
 }
+
+type PiezaRow = {
+  id: string;
+  cliente_id: string;
+  tipo: PieceType;
+  estado: PiezaEstado;
+  titulo: string | null;
+  grabacion_id: string | null;
+  guion_listo: boolean;
+  periodo_publicacion: string | null;
+  fecha_publicacion: string | null;
+  fecha_entrega: string | null;
+  tanda: 1 | 2;
+  horas_reales: number | null;
+  no_antes_de: string | null;
+  creada_en: string;
+};
+function rowToPieza(r: PiezaRow): Pieza {
+  return {
+    id: r.id,
+    clienteId: r.cliente_id,
+    tipo: r.tipo,
+    estado: r.estado,
+    titulo: r.titulo ?? undefined,
+    grabacionId: r.grabacion_id ?? undefined,
+    guionListo: r.guion_listo,
+    periodoPublicacion: r.periodo_publicacion ?? undefined,
+    fechaPublicacion: r.fecha_publicacion ?? undefined,
+    fechaEntrega: r.fecha_entrega ?? undefined,
+    tanda: r.tanda,
+    horasReales: r.horas_reales != null ? Number(r.horas_reales) : undefined,
+    noAntesDe: r.no_antes_de ?? undefined,
+    creadaEn: r.creada_en,
+  };
+}
+
+type GrabacionRow = {
+  id: string;
+  cliente_id: string;
+  fecha: string;
+  viaje_dias_antes: number;
+  viaje_dias_despues: number;
+  hecha: boolean;
+  guiones: string | null;
+  tomas: string[];
+  alimenta: string[];
+  notas: string | null;
+};
+function rowToGrabacion(r: GrabacionRow): Grabacion {
+  return {
+    id: r.id,
+    clienteId: r.cliente_id,
+    fecha: r.fecha,
+    viajeDiasAntes: r.viaje_dias_antes,
+    viajeDiasDespues: r.viaje_dias_despues,
+    hecha: r.hecha,
+    guiones: r.guiones ?? undefined,
+    tomas: r.tomas ?? [],
+    alimenta: r.alimenta ?? [],
+    notas: r.notas ?? undefined,
+  };
+}
+
+type IdeaRow = { id: string; cliente_id: string; texto: string; usada: boolean; creada_en: string };
+type ChequeoRow = { id: string; cliente_id: string; fecha: string; estado: AdsEstado; nota: string | null };
+type ReporteRow = { id: string; cliente_id: string; periodo: string; estado: AdsReporteEstado };
+type TareaRow = {
+  id: string;
+  titulo: string;
+  horas: number;
+  fecha_limite: string | null;
+  cliente_id: string | null;
+  hecha: boolean;
+  creada_en: string;
+};
+type GastoRow = { id: string; fecha: string; concepto: string; monto: number };
 
 // ---------- generic live table hook ----------
 //
@@ -221,6 +321,80 @@ export function useCobros(): Cobro[] | undefined {
   return useTable<CobroRow, Cobro>("cobros", rowToCobro);
 }
 
+export function usePiezas(): Pieza[] | undefined {
+  return useTable<PiezaRow, Pieza>("piezas", rowToPieza);
+}
+
+export function useGrabaciones(): Grabacion[] | undefined {
+  return useTable<GrabacionRow, Grabacion>("grabaciones", rowToGrabacion);
+}
+
+export function useIdeas(): Idea[] | undefined {
+  return useTable<IdeaRow, Idea>("ideas", (r) => ({
+    id: r.id,
+    clienteId: r.cliente_id,
+    texto: r.texto,
+    usada: r.usada,
+    creadaEn: r.creada_en,
+  }));
+}
+
+export function useAdsChequeos(): AdsChequeo[] | undefined {
+  return useTable<ChequeoRow, AdsChequeo>("ads_chequeos", (r) => ({
+    id: r.id,
+    clienteId: r.cliente_id,
+    fecha: r.fecha,
+    estado: r.estado,
+    nota: r.nota ?? undefined,
+  }));
+}
+
+export function useAdsReportes(): AdsReporte[] | undefined {
+  return useTable<ReporteRow, AdsReporte>("ads_reportes", (r) => ({
+    id: r.id,
+    clienteId: r.cliente_id,
+    periodo: r.periodo,
+    estado: r.estado,
+  }));
+}
+
+export function useTareas(): Tarea[] | undefined {
+  return useTable<TareaRow, Tarea>("tareas", (r) => ({
+    id: r.id,
+    titulo: r.titulo,
+    horas: Number(r.horas),
+    fechaLimite: r.fecha_limite ?? undefined,
+    clienteId: r.cliente_id ?? undefined,
+    hecha: r.hecha,
+    creadaEn: r.creada_en,
+  }));
+}
+
+/** Ids of the WhatsApp messages already sent. */
+export function useMensajesHechos(): Set<string> | undefined {
+  const rows = useTable<{ id: string; fecha: string }, string>("mensajes_hechos", (r) => r.id);
+  return rows ? new Set(rows) : undefined;
+}
+
+export function useGastos(): Gasto[] | undefined {
+  return useTable<GastoRow, Gasto>("gastos", (r) => ({
+    id: r.id,
+    fecha: r.fecha,
+    concepto: r.concepto,
+    monto: Number(r.monto),
+  }));
+}
+
+/** Fixed daily routines ticked off on `fechaISO`, as a set of fijo ids. */
+export function useFijosHechos(fechaISO: string): Set<string> | undefined {
+  const rows = useTable<{ id: string; fecha: string; fijo_id: string }, { fecha: string; fijoId: string }>(
+    "fijos_hechos",
+    (r) => ({ fecha: r.fecha, fijoId: r.fijo_id }),
+  );
+  if (!rows) return undefined;
+  return new Set(rows.filter((r) => r.fecha === fechaISO).map((r) => r.fijoId));
+}
+
 export function useDayOverride(fechaISO: string): number | null | undefined {
   const [horas, setHoras] = useState<number | null | undefined>(undefined);
 
@@ -275,6 +449,12 @@ export interface NuevoClienteInput {
   ventanaCobro?: [number, number];
   montoMensual?: number;
   notas?: string;
+  tipo?: ClienteTipo;
+  estado?: ClienteEstado;
+  intocable?: boolean;
+  adsUltimaRevision?: string;
+  ultimoAumento?: string;
+  notasReunion?: string;
 }
 
 function clienteInputToRow(input: NuevoClienteInput) {
@@ -288,6 +468,12 @@ function clienteInputToRow(input: NuevoClienteInput) {
     ventana_cobro: input.ventanaCobro ?? null,
     monto_mensual: input.montoMensual ?? null,
     notas: input.notas ?? null,
+    tipo: input.tipo,
+    estado: input.estado,
+    intocable: input.intocable,
+    ads_ultima_revision: input.adsUltimaRevision,
+    ultimo_aumento: input.ultimoAumento,
+    notas_reunion: input.notasReunion,
   };
 }
 
@@ -309,6 +495,184 @@ export async function actualizarCliente(id: string, input: Partial<NuevoClienteI
 
 export async function eliminarCliente(id: string): Promise<void> {
   const { error } = await supabase().from("clients").delete().eq("id", id);
+  if (error) throw error;
+}
+
+// ---------- piezas & grabaciones ----------
+
+export type NuevaPiezaInput = Pick<Pieza, "clienteId" | "tipo"> &
+  Partial<Omit<Pieza, "id" | "clienteId" | "tipo" | "creadaEn">>;
+
+function piezaToRow(p: Partial<Omit<Pieza, "id" | "creadaEn">>) {
+  const row = {
+    cliente_id: p.clienteId,
+    tipo: p.tipo,
+    estado: p.estado,
+    titulo: p.titulo,
+    grabacion_id: p.grabacionId,
+    guion_listo: p.guionListo,
+    periodo_publicacion: p.periodoPublicacion,
+    fecha_publicacion: p.fechaPublicacion,
+    fecha_entrega: p.fechaEntrega,
+    tanda: p.tanda,
+    horas_reales: p.horasReales,
+    no_antes_de: p.noAntesDe,
+  };
+  Object.entries(row).forEach(([k, v]) => v === undefined && delete (row as Record<string, unknown>)[k]);
+  return row;
+}
+
+export async function crearPiezas(inputs: NuevaPiezaInput[]): Promise<void> {
+  if (inputs.length === 0) return;
+  // A bulk insert sends the union of all keys and fills missing ones with null,
+  // which would override column defaults, so spell the defaults out per row.
+  const rows = inputs.map((i) => (({ ...piezaToRow(i), estado: i.estado ?? "idea", guion_listo: i.guionListo ?? false, tanda: i.tanda ?? 1 })));
+  const { error } = await supabase().from("piezas").insert(rows);
+  if (error) throw error;
+}
+
+/** Tick a piece forward (or back): this is the single write that makes the whole
+ * plan re-derive, since nothing else stores "the plan". */
+export async function actualizarPieza(
+  id: string,
+  changes: Partial<Omit<Pieza, "id" | "creadaEn">>,
+): Promise<void> {
+  const { error } = await supabase().from("piezas").update(piezaToRow(changes)).eq("id", id);
+  if (error) throw error;
+}
+
+/** Link a piece to a recording, or unlink it with `null` (the generic update drops undefined fields). */
+export async function asignarGrabacion(piezaId: string, grabacionId: string | null): Promise<void> {
+  const { error } = await supabase().from("piezas").update({ grabacion_id: grabacionId }).eq("id", piezaId);
+  if (error) throw error;
+}
+
+export async function eliminarPieza(id: string): Promise<void> {
+  const { error } = await supabase().from("piezas").delete().eq("id", id);
+  if (error) throw error;
+}
+
+export type NuevaGrabacionInput = Pick<Grabacion, "clienteId" | "fecha"> &
+  Partial<Omit<Grabacion, "id" | "clienteId" | "fecha">>;
+
+function grabacionToRow(g: Partial<Omit<Grabacion, "id">>) {
+  const row = {
+    cliente_id: g.clienteId,
+    fecha: g.fecha,
+    viaje_dias_antes: g.viajeDiasAntes,
+    viaje_dias_despues: g.viajeDiasDespues,
+    hecha: g.hecha,
+    guiones: g.guiones,
+    tomas: g.tomas,
+    alimenta: g.alimenta,
+    notas: g.notas,
+  };
+  Object.entries(row).forEach(([k, v]) => v === undefined && delete (row as Record<string, unknown>)[k]);
+  return row;
+}
+
+export async function crearGrabacion(input: NuevaGrabacionInput): Promise<Grabacion> {
+  const { data, error } = await supabase().from("grabaciones").insert(grabacionToRow(input)).select().single();
+  if (error) throw error;
+  return rowToGrabacion(data as GrabacionRow);
+}
+
+/** Moving `fecha` here is all it takes to move the delivery: pieces derive their
+ * due date from the recording unless they carry an explicit one. */
+export async function actualizarGrabacion(
+  id: string,
+  changes: Partial<Omit<Grabacion, "id">>,
+): Promise<void> {
+  const { error } = await supabase().from("grabaciones").update(grabacionToRow(changes)).eq("id", id);
+  if (error) throw error;
+}
+
+export async function eliminarGrabacion(id: string): Promise<void> {
+  const { error } = await supabase().from("grabaciones").delete().eq("id", id);
+  if (error) throw error;
+}
+
+export async function crearIdea(clienteId: string, texto: string): Promise<void> {
+  const { error } = await supabase().from("ideas").insert({ cliente_id: clienteId, texto });
+  if (error) throw error;
+}
+
+export async function marcarIdeaUsada(id: string, usada: boolean): Promise<void> {
+  const { error } = await supabase().from("ideas").update({ usada }).eq("id", id);
+  if (error) throw error;
+}
+
+export async function eliminarIdea(id: string): Promise<void> {
+  const { error } = await supabase().from("ideas").delete().eq("id", id);
+  if (error) throw error;
+}
+
+export async function guardarChequeoAds(
+  clienteId: string,
+  fecha: string,
+  estado: AdsEstado,
+  nota?: string,
+): Promise<void> {
+  const { error } = await supabase()
+    .from("ads_chequeos")
+    .upsert({ id: `${fecha}__${clienteId}`, cliente_id: clienteId, fecha, estado, nota: nota ?? null });
+  if (error) throw error;
+}
+
+export async function guardarReporteAds(
+  clienteId: string,
+  periodo: string,
+  estado: AdsReporteEstado,
+): Promise<void> {
+  const { error } = await supabase()
+    .from("ads_reportes")
+    .upsert({ id: `${periodo}__${clienteId}`, cliente_id: clienteId, periodo, estado });
+  if (error) throw error;
+}
+
+export async function crearGasto(input: Omit<Gasto, "id">): Promise<void> {
+  const { error } = await supabase().from("gastos").insert(input);
+  if (error) throw error;
+}
+
+export async function eliminarGasto(id: string): Promise<void> {
+  const { error } = await supabase().from("gastos").delete().eq("id", id);
+  if (error) throw error;
+}
+
+export async function crearTarea(input: {
+  titulo: string;
+  horas: number;
+  fechaLimite?: string;
+  clienteId?: string;
+}): Promise<void> {
+  const { error } = await supabase()
+    .from("tareas")
+    .insert({
+      titulo: input.titulo,
+      horas: input.horas,
+      fecha_limite: input.fechaLimite ?? null,
+      cliente_id: input.clienteId ?? null,
+    });
+  if (error) throw error;
+}
+
+export async function completarTarea(id: string): Promise<void> {
+  const { error } = await supabase().from("tareas").update({ hecha: true }).eq("id", id);
+  if (error) throw error;
+}
+
+export async function marcarMensajeHecho(id: string, fechaISO: string): Promise<void> {
+  const { error } = await supabase().from("mensajes_hechos").upsert({ id, fecha: fechaISO });
+  if (error) throw error;
+}
+
+export async function marcarFijo(fechaISO: string, fijoId: string, hecho: boolean): Promise<void> {
+  const id = `${fechaISO}__${fijoId}`;
+  const q = hecho
+    ? supabase().from("fijos_hechos").upsert({ id, fecha: fechaISO, fijo_id: fijoId })
+    : supabase().from("fijos_hechos").delete().eq("id", id);
+  const { error } = await q;
   if (error) throw error;
 }
 
