@@ -14,9 +14,9 @@ export function DetalleDia({ info, clients }: { info: DiaCalendario; clients: Cl
   const vacio = info.tareas.length === 0 && info.hitos.length === 0 && info.cobros.length === 0;
 
   return (
-    <section className="mt-5 rounded-[12px] border border-borde bg-bg-elevada px-4 py-3">
+    <section key={info.fecha} className="papel entra mt-5 px-4 py-3.5">
       <header className="mb-2 flex items-baseline justify-between">
-        <h2 className="font-semibold capitalize">{format(fromISODate(info.fecha), "EEEE d 'de' MMMM", { locale: es })}</h2>
+        <h2 className="titulo-serif text-[1.125rem] font-medium capitalize">{format(fromISODate(info.fecha), "EEEE d 'de' MMMM", { locale: es })}</h2>
         {info.carga && (
           <p className="text-[0.8125rem] text-texto-secundario">
             {fmt(info.carga.horas)} de {fmt(info.carga.capacidad)} h

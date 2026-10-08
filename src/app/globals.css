@@ -7,11 +7,29 @@
   --color-error: #b3261e;
   --color-bg: #faf7f2;
   --color-bg-elevada: #fdfcfa;
+  --color-bg-hundida: #f3eee5;
   --color-texto: #211d18;
   --color-texto-secundario: #6b6558;
   --color-borde: #e8e2d6;
+
+  /* Depth: warm-tinted, always offset — light comes from above-left. */
   --shadow-nav: 0 -2px 16px rgba(33, 29, 24, 0.08);
-  --shadow-sheet: 0 8px 32px rgba(33, 29, 24, 0.16);
+  --shadow-sheet: 0 -8px 40px rgba(33, 29, 24, 0.18);
+  --shadow-papel: 0 1px 0 rgba(255, 255, 255, 0.9) inset, 0 1px 2px rgba(84, 52, 22, 0.05),
+    0 6px 18px -8px rgba(84, 52, 22, 0.12);
+  --shadow-papel-alto: 0 1px 0 rgba(255, 255, 255, 0.9) inset, 0 2px 4px rgba(84, 52, 22, 0.06),
+    0 14px 30px -12px rgba(84, 52, 22, 0.22);
+  --shadow-boton: 0 1px 0 rgba(255, 255, 255, 0.22) inset, 0 -1px 0 rgba(0, 0, 0, 0.12) inset,
+    0 2px 6px -1px rgba(160, 52, 20, 0.35);
+
+  /* Paper grain (static SVG noise tiles, painted as background layers — no
+   * blend modes, no overlay) + ambient light strength, tuned per theme. */
+  --grano: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 .42  0 0 0 0 .3  0 0 0 0 .18  0 0 0 .22 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+  --grano-fino: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 .42  0 0 0 0 .3  0 0 0 0 .18  0 0 0 .1 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+  --luz-opacidad: 0.55;
+
+  --ease-salida: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-resorte: cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -21,12 +39,22 @@
     --color-ambar: #d9a24e;
     --color-error: #f2877e;
     --color-bg: #1b1712;
-    --color-bg-elevada: #221d17;
+    --color-bg-elevada: #241e18;
+    --color-bg-hundida: #16120e;
     --color-texto: #f5f0e6;
     --color-texto-secundario: #b5ac9a;
-    --color-borde: #332c22;
+    --color-borde: #362e24;
     --shadow-nav: 0 -2px 16px rgba(0, 0, 0, 0.35);
-    --shadow-sheet: 0 8px 32px rgba(0, 0, 0, 0.45);
+    --shadow-sheet: 0 -8px 40px rgba(0, 0, 0, 0.5);
+    --shadow-papel: 0 1px 0 rgba(255, 240, 220, 0.04) inset, 0 1px 2px rgba(0, 0, 0, 0.3),
+      0 8px 20px -10px rgba(0, 0, 0, 0.5);
+    --shadow-papel-alto: 0 1px 0 rgba(255, 240, 220, 0.05) inset, 0 2px 4px rgba(0, 0, 0, 0.35),
+      0 16px 32px -12px rgba(0, 0, 0, 0.6);
+    --shadow-boton: 0 1px 0 rgba(255, 255, 255, 0.18) inset, 0 -1px 0 rgba(0, 0, 0, 0.2) inset,
+      0 2px 8px -1px rgba(0, 0, 0, 0.45);
+    --grano: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 .92  0 0 0 0 .8  0 0 0 .07 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+    --grano-fino: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 .92  0 0 0 0 .8  0 0 0 .04 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+    --luz-opacidad: 0.22;
   }
 }
 
@@ -36,10 +64,15 @@
   --color-ambar: var(--color-ambar);
   --color-bg: var(--color-bg);
   --color-bg-elevada: var(--color-bg-elevada);
+  --color-bg-hundida: var(--color-bg-hundida);
   --color-texto: var(--color-texto);
   --color-texto-secundario: var(--color-texto-secundario);
   --color-borde: var(--color-borde);
   --font-sans: var(--font-inter);
+  --font-serif: var(--font-fraunces);
+  --shadow-papel: var(--shadow-papel);
+  --shadow-papel-alto: var(--shadow-papel-alto);
+  --shadow-boton: var(--shadow-boton);
 }
 
 * {
@@ -52,13 +85,118 @@ body {
 }
 
 body {
-  background: var(--color-bg);
+  background: var(--grano) 0 0 / 200px 200px, var(--color-bg);
   color: var(--color-texto);
   font-family: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  font-feature-settings: "cv11", "ss01";
 }
 
 ::selection {
   background: color-mix(in oklab, var(--color-terracota) 25%, transparent);
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-terracota);
+  outline-offset: 2px;
+  border-radius: 8px;
+}
+
+/* ───────────── Atmosphere: paper grain + afternoon light ───────────── */
+
+/* Two soft pools of warm light behind the content. They drift very slowly,
+ * like sun moving across a desk; frozen under reduced motion. */
+.luz {
+  pointer-events: none;
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  opacity: var(--luz-opacidad);
+}
+.luz::before,
+.luz::after {
+  content: "";
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(60px);
+  will-change: transform;
+}
+.luz::before {
+  width: 70vmax;
+  height: 50vmax;
+  top: -28vmax;
+  right: -18vmax;
+  background: radial-gradient(closest-side, color-mix(in oklab, var(--color-ambar) 55%, transparent), transparent);
+  animation: deriva-a 38s ease-in-out infinite alternate;
+}
+.luz::after {
+  width: 55vmax;
+  height: 40vmax;
+  top: -22vmax;
+  left: -20vmax;
+  background: radial-gradient(closest-side, color-mix(in oklab, var(--color-terracota) 32%, transparent), transparent);
+  animation: deriva-b 46s ease-in-out infinite alternate;
+}
+@keyframes deriva-a {
+  to {
+    transform: translate3d(-8vmax, 6vmax, 0) scale(1.08);
+  }
+}
+@keyframes deriva-b {
+  to {
+    transform: translate3d(10vmax, 4vmax, 0) scale(0.94);
+  }
+}
+
+@layer components {
+/* ───────────── Surfaces ───────────── */
+
+/* Elevated paper: the one container treatment. Replaces flat bordered boxes. */
+.papel {
+  background: var(--grano-fino) 0 0 / 200px 200px, var(--color-bg-elevada);
+  border: 1px solid color-mix(in oklab, var(--color-borde) 85%, transparent);
+  border-radius: 16px;
+  box-shadow: var(--shadow-papel);
+}
+
+.titulo-serif {
+  font-family: var(--font-fraunces), ui-serif, Georgia, serif;
+  font-variation-settings: "SOFT" 100, "WONK" 0;
+  letter-spacing: -0.02em;
+  font-optical-sizing: auto;
+}
+
+/* Sentence case for date-fns' lowercase Spanish dates ("jueves 8 de…"). */
+.mayuscula::first-letter {
+  text-transform: uppercase;
+}
+
+.numeros {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Tactile press for any tappable thing. */
+.tocable {
+  transition:
+    transform 160ms var(--ease-salida),
+    background-color 200ms ease,
+    color 200ms ease,
+    border-color 200ms ease,
+    box-shadow 200ms ease;
+}
+.tocable:active {
+  transform: scale(0.97);
+}
+
+.boton-primario {
+  background: var(--color-terracota);
+  color: var(--color-bg);
+  box-shadow: var(--shadow-boton);
+}
+@media (hover: hover) {
+  .boton-primario:hover {
+    background: color-mix(in oklab, var(--color-terracota) 90%, white);
+  }
 }
 
 .input {
@@ -69,6 +207,9 @@ body {
   padding: 0.625rem 0.75rem;
   font-size: 1rem;
   color: var(--color-texto);
+  transition:
+    border-color 180ms ease,
+    box-shadow 180ms ease;
 }
 
 .input[aria-invalid="true"] {
@@ -78,4 +219,240 @@ body {
 .input:focus {
   outline: none;
   border-color: var(--color-terracota);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--color-terracota) 14%, transparent);
+}
+
+/* ───────────── Motion vocabulary ───────────── */
+
+/* Arrival: rises out of a slight blur. Content is visible by default if the
+ * animation never runs (fill-mode backwards only covers the delay). */
+.entra {
+  animation: entra 520ms var(--ease-salida) backwards;
+  animation-delay: calc(min(var(--i, 0), 10) * 45ms);
+}
+@keyframes entra {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+    filter: blur(4px);
+  }
+}
+
+.aparece {
+  animation: aparece 280ms ease-out backwards;
+}
+@keyframes aparece {
+  from {
+    opacity: 0;
+  }
+}
+
+/* Small "yes" for toggles that land on a good state. */
+.pop {
+  animation: pop 420ms var(--ease-resorte);
+}
+@keyframes pop {
+  0% {
+    transform: scale(0.82);
+  }
+  60% {
+    transform: scale(1.06);
+  }
+}
+
+/* Bell: one wiggle on arrival when there is something to look at. */
+.campanita {
+  transform-origin: 50% 10%;
+  animation: campanita 900ms ease-in-out 600ms 1;
+}
+@keyframes campanita {
+  0%,
+  100% {
+    transform: rotate(0);
+  }
+  20% {
+    transform: rotate(14deg);
+  }
+  40% {
+    transform: rotate(-11deg);
+  }
+  60% {
+    transform: rotate(7deg);
+  }
+  80% {
+    transform: rotate(-3deg);
+  }
+}
+
+/* Sun rays for the "vas bien" empty state. */
+.rayos {
+  transform-origin: 50% 50%;
+  animation: gira 40s linear infinite;
+}
+@keyframes gira {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.late {
+  transform-origin: 50% 50%;
+  animation: late 4.5s ease-in-out infinite;
+}
+@keyframes late {
+  50% {
+    transform: scale(1.06);
+  }
+}
+
+/* Sheets: backdrop dissolves in, panel rises with a touch of overshoot. */
+.velo {
+  animation: aparece 260ms ease-out both;
+}
+.velo[data-cerrando] {
+  animation: desaparece 200ms ease-in both;
+}
+.hoja {
+  animation: hoja-sube 460ms var(--ease-salida) both;
+}
+.hoja[data-cerrando] {
+  animation: hoja-baja 220ms cubic-bezier(0.5, 0, 0.75, 0) both;
+}
+@keyframes hoja-sube {
+  from {
+    transform: translateY(100%);
+  }
+}
+@keyframes hoja-baja {
+  to {
+    transform: translateY(100%);
+  }
+}
+@keyframes desaparece {
+  to {
+    opacity: 0;
+  }
+}
+
+/* The tick: circle fills, check draws, row exhales. */
+.tilde-circulo {
+  transition:
+    fill 220ms ease,
+    stroke 220ms ease;
+}
+.tilde-check {
+  stroke-dasharray: 14;
+  stroke-dashoffset: 14;
+}
+[data-hecho] .tilde-check {
+  animation: dibuja 300ms var(--ease-salida) 90ms forwards;
+}
+[data-hecho] .tilde {
+  animation: pop 420ms var(--ease-resorte);
+}
+@keyframes dibuja {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+.chispa {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.chispa i {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 4px;
+  height: 4px;
+  margin: -2px;
+  border-radius: 2px;
+  background: var(--color-verde);
+  opacity: 0;
+}
+[data-hecho] .chispa i {
+  animation: chispa 560ms var(--ease-salida) 60ms forwards;
+}
+@keyframes chispa {
+  0% {
+    opacity: 1;
+    transform: rotate(var(--a)) translateY(0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: rotate(var(--a)) translateY(-17px) scale(0.4);
+  }
+}
+.fila-hecha {
+  animation: fila-sale 520ms var(--ease-salida) 380ms forwards;
+}
+@keyframes fila-sale {
+  to {
+    opacity: 0.45;
+  }
+}
+
+/* "Algo cambió" confirmation: the arrows turn once, like the plan resettling. */
+.reacomoda {
+  animation: reacomoda 900ms var(--ease-salida) 120ms backwards;
+}
+@keyframes reacomoda {
+  from {
+    transform: rotate(-300deg);
+  }
+}
+
+/* Day meter segments grow in from the left, one after another. */
+.segmento {
+  transform-origin: left center;
+  animation: crece 700ms var(--ease-salida) backwards;
+  animation-delay: calc(200ms + var(--i, 0) * 70ms);
+}
+@keyframes crece {
+  from {
+    transform: scaleX(0);
+  }
+}
+
+}
+
+/* Route change: old page dissolves quickly, new one settles in from below. */
+::view-transition-old(.pagina) {
+  animation: 140ms ease-in both pagina-sale;
+}
+::view-transition-new(.pagina) {
+  animation: 380ms var(--ease-salida) 60ms both pagina-entra;
+}
+@keyframes pagina-sale {
+  to {
+    opacity: 0;
+    filter: blur(2px);
+  }
+}
+@keyframes pagina-entra {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+    filter: blur(3px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after,
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation-duration: 1ms !important;
+    animation-delay: 0ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+  }
+  .luz::before,
+  .luz::after,
+  .rayos,
+  .late {
+    animation: none !important;
+  }
 }

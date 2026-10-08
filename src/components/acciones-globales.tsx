@@ -7,6 +7,7 @@ import { crearTarea } from "@/lib/supabase/data";
 import { usePlan } from "@/lib/supabase/use-plan";
 import { AlertaGlobal, AlertaGrupo, alertasGlobales } from "@/lib/domain/alertas";
 import { BotonPrimario, Sheet } from "@/components/sheet";
+import { Sol } from "@/components/empty-state";
 
 const GRUPO_LABEL: Record<AlertaGrupo, string> = {
   atraso: "Atrasos",
@@ -18,7 +19,7 @@ const GRUPO_LABEL: Record<AlertaGrupo, string> = {
 };
 const GRUPO_ORDEN: AlertaGrupo[] = ["atraso", "carga", "aprobacion", "cobro", "contenido", "ads"];
 
-const campo = "rounded-[12px] border border-borde bg-bg-elevada px-3 py-2.5";
+const campo = "input";
 const etiqueta = "text-[0.8125rem] font-medium text-texto-secundario";
 
 /** Top bar with the alerts bell, plus the floating "+" for loose tasks. Rendered
@@ -45,15 +46,19 @@ export function AccionesGlobales() {
 
   return (
     <>
-      <div className="sticky top-0 z-30 flex justify-end bg-bg/85 px-4 py-2 backdrop-blur lg:px-8">
+      <div className="sticky top-0 z-30 flex items-center justify-between bg-bg/80 px-4 py-2 backdrop-blur-md lg:justify-end lg:bg-transparent lg:px-8 lg:backdrop-blur-none">
+        <Link href="/hoy" className="lg:hidden" aria-label="Paula — ir a Hoy">
+          <span className="titulo-serif text-[1.25rem] font-medium italic leading-none">Paula</span>
+          <span className="ml-0.5 inline-block h-1 w-1 rounded-full bg-terracota" aria-hidden />
+        </Link>
         <button
           onClick={() => setCampanaAbierta(true)}
           aria-label={alertas.length > 0 ? `Alertas: ${alertas.length}` : "Alertas"}
-          className="relative p-1.5 text-texto-secundario"
+          className="tocable relative rounded-full p-2 text-texto-secundario hover:bg-borde/50 hover:text-texto"
         >
-          <Bell size={20} strokeWidth={1.75} />
+          <Bell size={20} strokeWidth={1.75} className={alertas.length > 0 ? "campanita" : undefined} />
           {alertas.length > 0 && (
-            <span className="absolute -right-0.5 -top-0.5 flex h-[16px] min-w-[16px] items-center justify-center rounded-[8px] bg-terracota px-1 text-[0.6875rem] font-medium leading-none text-bg">
+            <span className="pop absolute right-0 top-0 flex h-[16px] min-w-[16px] items-center justify-center rounded-[8px] bg-terracota px-1 text-[0.6875rem] font-medium leading-none text-bg ring-2 ring-bg">
               {alertas.length}
             </span>
           )}
@@ -63,9 +68,9 @@ export function AccionesGlobales() {
       <button
         onClick={() => setTareaAbierta(true)}
         aria-label="Agregar tarea suelta"
-        className="fixed bottom-[calc(88px+env(safe-area-inset-bottom,0px))] right-4 z-40 flex h-12 w-12 items-center justify-center rounded-full bg-terracota text-bg shadow-[var(--shadow-sheet)] lg:bottom-8 lg:right-8"
+        className="boton-primario tocable fixed bottom-[calc(92px+env(safe-area-inset-bottom,0px))] right-4 z-40 flex h-14 w-14 items-center justify-center rounded-[18px] group lg:bottom-8 lg:right-8"
       >
-        <Plus size={24} strokeWidth={2.25} />
+        <Plus size={24} strokeWidth={2.25} className="transition-transform duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:rotate-90 group-active:rotate-90" />
       </button>
 
       <Sheet open={campanaAbierta} title="Alertas" onClose={() => setCampanaAbierta(false)}>
@@ -84,7 +89,11 @@ export function AccionesGlobales() {
 
 function ListaAlertas({ alertas, onNavegar }: { alertas: AlertaGlobal[]; onNavegar: () => void }) {
   if (alertas.length === 0) {
-    return <p className="text-[0.9375rem] text-texto-secundario">Sin alertas. Todo viene en orden.</p>;
+    return <div className="flex flex-col items-center py-6 text-center">
+        <Sol />
+        <p className="titulo-serif mt-3 text-[1.125rem] font-medium">Todo viene en orden</p>
+        <p className="mt-0.5 text-[0.9375rem] text-texto-secundario">Sin alertas por ahora.</p>
+      </div>;
   }
   return (
     <div className="flex flex-col gap-4">
@@ -101,7 +110,7 @@ function ListaAlertas({ alertas, onNavegar }: { alertas: AlertaGlobal[]; onNaveg
                     <Link
                       href={a.href}
                       onClick={onNavegar}
-                      className="block rounded-[12px] bg-ambar/10 px-4 py-3 text-[0.9375rem]"
+                      className="tocable block rounded-[12px] bg-ambar/10 px-4 py-3 text-[0.9375rem] hover:bg-ambar/15"
                     >
                       {a.mensaje}
                     </Link>

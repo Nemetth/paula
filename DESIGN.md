@@ -17,8 +17,45 @@ colors:
   gris-musgo: "#6B6558"
   gris-musgo-dark: "#B5AC9A"
   borde: "#E8E2D6"
-  borde-dark: "#332C22"
+  borde-dark: "#362E24"
+  hueso-hundido: "#F3EEE5"
+  hueso-hundido-dark: "#16120E"
 typography:
+  display:
+    fontFamily: "Fraunces, ui-serif, Georgia, serif"
+    fontSize: "2.125rem"
+    fontWeight: 500
+    lineHeight: 1.1
+  display-lg:
+    fontFamily: "Fraunces, ui-serif, Georgia, serif"
+    fontSize: "2.5rem"
+    fontWeight: 500
+    lineHeight: 1.1
+  page-title-lg:
+    fontFamily: "Fraunces, ui-serif, Georgia, serif"
+    fontSize: "2.25rem"
+    fontWeight: 500
+    lineHeight: 1.15
+  page-title:
+    fontFamily: "Fraunces, ui-serif, Georgia, serif"
+    fontSize: "1.875rem"
+    fontWeight: 500
+    lineHeight: 1.15
+  readout:
+    fontFamily: "Fraunces, ui-serif, Georgia, serif"
+    fontSize: "1.75rem"
+    fontWeight: 500
+    lineHeight: 1.2
+  section-title:
+    fontFamily: "Fraunces, ui-serif, Georgia, serif"
+    fontSize: "1.25rem"
+    fontWeight: 500
+    lineHeight: 1.3
+  small-serif:
+    fontFamily: "Fraunces, ui-serif, Georgia, serif"
+    fontSize: "1.125rem"
+    fontWeight: 500
+    lineHeight: 1.3
   title:
     fontFamily: "Inter, ui-sans-serif, system-ui, sans-serif"
     fontSize: "1.25rem"
@@ -39,10 +76,29 @@ typography:
     fontSize: "0.8125rem"
     fontWeight: 500
     lineHeight: 1.3
+  chip:
+    fontFamily: "Inter, ui-sans-serif, system-ui, sans-serif"
+    fontSize: "0.75rem"
+    fontWeight: 500
+    lineHeight: 1.3
+  badge:
+    fontFamily: "Inter, ui-sans-serif, system-ui, sans-serif"
+    fontSize: "0.6875rem"
+    fontWeight: 500
+    lineHeight: 1
+  error-box:
+    fontFamily: "Inter, ui-sans-serif, system-ui, sans-serif"
+    fontSize: "0.875rem"
+    fontWeight: 400
+    lineHeight: 1.4
 rounded:
+  xs: "2px"
   sm: "8px"
   md: "12px"
+  paper: "16px"
   lg: "20px"
+  nav: "22px"
+  sheet: "24px"
 spacing:
   xs: "4px"
   sm: "8px"
@@ -65,17 +121,18 @@ components:
 
 ## Overview
 
-**Creative North Star: "The Standing Order"**
+**Creative North Star: "Papel y sol de tarde"** (2026-10-08, supersedes "The Standing Order")
 
-Paula chose the standing/conventional path over a bespoke visual world (recorded in PRODUCT.md's Brand Commitments): a familiar, standard task-app register rather than an invented identity, executed at the craft level of **Todoist/Things** rather than a generic, unpolished dashboard. The system is deliberately quiet — one warm neutral ground, one confident accent spent only on action and urgency, and native mobile list rows instead of cards or kanban columns. Nothing here is trying to look distinctive; it is trying to disappear so the day's list is the only thing Paula has to read.
+Paula asked for the app to feel prettier and more alive — better textures, things that move a little, more personality — and chose the **warm editorial** direction over both "same look, livelier" and "bolder". The product is still an Operate tool checked in short bursts, so the structure (Hoy-first, list rows, one accent, restrained status colors) is unchanged; what changed is the material. The app now reads like a good paper planner on a desk in afternoon light: a grain you can almost feel, warm light pooling at the top of the screen, cards that sit on the page like sheets of paper, a serif voice for titles and money, and one authored moment — ticking a task off.
 
-Density is high but calm: this is a tool checked in short bursts between production tasks, so every row must be scannable in a glance, not admired. Light and dark are both first-class — Paula works at all hours, on her phone, so the surface follows system theme rather than defaulting to one.
+Light and dark are both first-class and follow the system theme.
 
 **Key Characteristics:**
-- Warm neutral ground (bone, not stark white or cold gray), one accent color, restrained strategy
-- Native mobile list rows with checkable affordances, not cards or kanban
-- Urgency and status read from row-level tint and small labels, never from colored borders
-- Inter throughout; no display/decorative face — this is an Operate surface, not a persuasion surface
+- Warm neutral ground with static paper grain; two slow-drifting pools of warm light behind the content
+- "Papel" surfaces: elevated, softly shadowed, finely grained cards holding list rows (rows themselves are never individually elevated)
+- Fraunces (soft, optical-sized serif) for titles, greetings and money/hour readouts; Inter for every row, label and control
+- Motion with a job: arrival stagger, sheets with exit, sliding nav puck, the tick, rolling money totals, route cross-dissolve
+- Urgency and status still read from row tint and small labels, never colored borders
 
 ## Colors
 
@@ -97,35 +154,45 @@ Restrained strategy: neutrals carry the surface, one accent (terracota) carries 
 - **Gris Musgo** (`#6B6558`, dark-mode `#B5AC9A`): secondary/meta text — always tinted warm from the neutral hue, never plain gray.
 - **Borde** (`#E8E2D6`, dark-mode `#332C22`): hairline dividers between list rows and section edges.
 
+### Client palette
+Each client gets a fixed earthy hue (arcilla, salvia, lavanda gris, ocre, petróleo, ciruela, oliva, cuero, azul pizarra, durazno tostado — `PALETA_CLIENTES` in `src/lib/domain/calendario.ts`). The same hue appears as the client's dot in rows, its monogram in the roster, its segment in Hoy's day strip and its dot in the calendar, so a client is recognisable by color across screens. These are identification colors, not status colors.
+
+### Sunken neutral
+- **Hueso Hundido** (`#F3EEE5`, dark `#16120E`): wells *inside* a paper surface — hour chips, quoted WhatsApp text, estimate boxes, a sheet's suggestion list. Use a well instead of nesting a card inside a card.
+
 ### Named Rules
-**The One Voice Rule.** Terracota appears on at most one primary action and one urgency marker per screen. It is never used decoratively, and never for more than ~10% of a screen's surface.
+**The One Voice Rule.** Terracota appears on at most one primary action and one urgency marker per screen (the floating "+" is global chrome and does not count). It is never used decoratively, and never for more than ~10% of a screen's surface.
 
 **The No-Border Rule.** Status and urgency are read from a row's background tint, a small label, or an icon — never from a colored left/right border on a row, card, or alert.
 
 ## Typography
 
-**Body Font:** Inter (with `ui-sans-serif, system-ui, sans-serif` fallback)
+**Display / title font:** Fraunces (variable, `SOFT` 100, optical sizing on), weight 500, tracking -0.02em — via the `.titulo-serif` class.
+**UI font:** Inter (with `ui-sans-serif, system-ui, sans-serif` fallback) for everything else.
 
-**Character:** A workhorse UI face used exactly as intended — no display pairing, no italic accents. This is an Operate surface; typography's job is unambiguous scanning, not personality.
+**Character:** Fraunces carries the voice — greetings, page titles, section titles in detail views and Plata, sheet titles, empty-state titles, and the numbers Paula actually reads (hours today, peso totals). Inter does the work — rows, labels, buttons, inputs. Never set a row's client name or any control in Fraunces. The sidebar/top-bar wordmark is Fraunces italic followed by a small terracota dot.
 
 ### Hierarchy
-- **Title** (600, 1.25rem, 1.3 line-height): screen headers ("Hoy", "Clientes", "Plata") and client names in roster/detail views.
-- **Body** (400, 1rem, 1.5 line-height): form fields and running prose (notes, empty-state copy, sheet explanations).
-- **Detail** (400, 0.9375rem, 1.4 line-height): the second line of a list row — task descriptions under a client name, secondary roster/cobro lines. One deliberate step below Body for row-dense screens; not a substitute for Label.
-- **Label** (500, 0.8125rem, 1.3 line-height): stage chips, meta lines (hours estimate, day count), nav bar labels.
+- **Display** (Fraunces 500, 2.125rem / lg 2.5rem): Hoy's time-of-day greeting only ("Buen día", "Buenas tardes").
+- **Page title** (Fraunces 500, 1.875rem / lg 2.25rem): every other screen's h1.
+- **Readout** (Fraunces 500, 1.75rem, tabular nums): hours today, "por cobrar", simulator total.
+- **Section title** (Fraunces 500, 1.25rem): sheet titles, empty-state titles, Plata/ficha section headings, balance amounts.
+- **Small serif** (Fraunces 500, 1.125rem): calendar period title, day-detail heading.
+- **Body** (Inter 400, 1rem) · **Detail** (Inter 400, 0.9375rem) · **Label** (Inter 500, 0.8125rem) as before.
+- **Chip** (Inter 500, 0.75rem): "atrasada" tag, nav labels. **Badge** (0.6875rem): integer count pills.
 
 ### Named Rules
-**The Numerals-Are-Content Rule.** Piece counts and hour estimates are body weight, never oversized "hero metric" numerals — they are one fact in a row, not the row's reason to exist.
+**The Readable-Numbers Rule.** Hours and pesos may use the serif readout size, because legibility of money and today's load is a named product principle — but never larger than 1.75rem, never with a decorative accent, and always paired with a plain-language context line ("h de 8 h libres", "Nada vencido"). Piece counts inside rows stay body weight.
 
 ## Layout
 
-Mobile-first single column, capped at a ~640px content measure and centered on wider viewports. Horizontal padding 16–20px; vertical rhythm between list items 12–16px; more space above a group/section header than below it (24px above, 8px below). Primary navigation is a fixed bottom tab bar (Hoy / Clientes / Plata) with safe-area inset padding.
+Mobile-first single column, capped at a ~640px content measure and centered on wider viewports. Horizontal padding 16–20px; vertical rhythm between list items 12–16px; more space above a group/section header than below it (24px above, 8px below). Primary navigation is a floating bottom tab bar (Hoy · Calendario · Clientes · Ads · Plata) with safe-area inset padding — see Components → Navigation.
 
 ### Desktop (≥1024px)
 
 Superseded 2026-09-17: desktop deliberately diverges from mobile now, reading as a standard SaaS work app rather than a reflowed phone screen — Paula wanted the desktop surface to look like ordinary software, not an oversized mobile view. Mobile IA and the mobile-specific rules above (bottom tab bar, borderless list rows, single column) are unchanged; everything in this section only takes effect at the `lg` breakpoint.
 
-- **Sidebar, not a bottom bar.** A fixed 240px-wide left sidebar (`{colors.hueso-elevado}` background, `{colors.borde}` right edge) replaces the bottom tab bar: wordmark at top, Hoy / Clientes / Plata as a vertical nav list, Ajustes pinned to the bottom. Active state and the Plata vencidos counter reuse the same terracota-tint + integer-pill treatment the bottom bar uses on mobile.
+- **Sidebar, not a bottom bar.** A fixed 240px-wide left sidebar (`{colors.hueso-elevado}` background, `{colors.borde}` right edge) replaces the bottom tab bar: wordmark at top, the five sections as a vertical nav list, Ajustes pinned to the bottom. Active state and the Plata vencidos counter reuse the same terracota-tint + integer-pill treatment the bottom bar uses on mobile.
 - **Wider content, still centered.** Each screen's content column widens (screen-dependent, ~720–960px) and content that was a bare bordered list on mobile gets wrapped in a bordered, `{colors.hueso-elevado}`-filled panel — the "card" read of a generic SaaS dashboard — while the rows inside keep the same Task Row/list-row anatomy, not a card-per-item grid.
 - **Client roster is the one exception that becomes a real card grid** (2–3 columns depending on width) on desktop only — this is the one place PRODUCT.md's "not a card grid" rule is intentionally overridden above `lg`, because a roster reads naturally as a grid of contact cards in desktop software; the mobile roster stays a plain list.
 - **Stat cards.** Where mobile stacks a single metric block (horas de hoy, por cobrar), desktop lays equivalent metrics out side-by-side as a row of stat cards — still following the Numerals-Are-Content Rule (body-weight numbers, no hero metrics).
@@ -133,31 +200,45 @@ Superseded 2026-09-17: desktop deliberately diverges from mobile now, reading as
 
 ## Elevation & Depth
 
-Flat by default — list rows and page backgrounds carry no shadow, separated only by hairline dividers (`{colors.borde}`). Depth is reserved for surfaces that float above content: the bottom nav bar and any sheet/dialog get a soft upward shadow to lift them off the page.
+Surfaces are paper on a desk. The page ground carries a static SVG grain (`--grano`); paper surfaces carry a finer one (`--grano-fino`). Behind everything, `.luz` paints two blurred radial pools (ámbar top-right, terracota top-left) that drift over ~40s; frozen under reduced motion, dimmed in dark mode. No overlay blend layers — grain is a background layer only, so it costs nothing after first paint.
 
 ### Shadow Vocabulary
-- **nav-lift** (`box-shadow: 0 -2px 16px rgba(33, 29, 24, 0.08)`): under the bottom nav bar, light mode. Dark mode: `0 -2px 16px rgba(0, 0, 0, 0.35)`.
-- **sheet-lift** (`box-shadow: 0 8px 32px rgba(33, 29, 24, 0.16)`): under any modal sheet (used sparingly — see Do's and Don'ts).
+- **papel** (`--shadow-papel`): 1px inset top highlight + short contact shadow + soft offset blur, warm-tinted. Default for cards, the day readout, list containers, fijos chips.
+- **papel-alto** (`--shadow-papel-alto`): the same, lifted — floating bottom nav, selected calendar day, dragged-over week column, desktop roster card hover.
+- **boton** (`--shadow-boton`): primary buttons and the "+" — inner top light, inner bottom shade, small terracota-tinted drop.
+- **sheet** (`--shadow-sheet`): upward shadow under bottom sheets.
 
 ### Named Rules
-**The Flat-By-Default Rule.** Shadows appear only on surfaces that genuinely float above the page (nav bar, sheets). A list row is never elevated.
+**The Paper Rule.** Lists live inside one paper surface with hairline dividers; individual rows are never elevated. Inside a paper surface, use a sunken well (`bg-hundida`), never a nested card.
 
 ## Shapes
 
-Rounded but not soft-play: 12px radius on interactive containers (buttons, inputs, task rows when grouped in a block), 8px on small chips/tags (stage labels, status pills), 20px on the bottom nav bar's top corners (reads as a bottom sheet, not a browser chrome bar). No pill-shaped (full-round) buttons — this is a tool, not a marketing surface.
+8px chips and status pills · 12px buttons, inputs, rows · 16px paper surfaces · 20px desktop form panels · 22px floating bottom nav · 24px sheets. Full-round only for icon buttons, the fijos toggle chips, monograms and count badges. The "+" is an 18px-radius rounded square, not a circle.
+
+## Motion
+
+One authored moment, the rest is feedback and continuity. Ease-out `cubic-bezier(0.16, 1, 0.3, 1)` for arrivals; a slight overshoot (`--ease-resorte`) only for the small "yes" pops. Everything collapses to instant under `prefers-reduced-motion`.
+
+- **The tick (focal):** tapping a task's circle fills it verde, draws the check, throws six tiny sparks, buzzes 12ms on phones, strikes the detail line, and only then (450ms) writes — the row exhales and the plan re-derives without it. Component: `src/components/tilde.tsx`; reused in "Me sobró tiempo".
+- **Arrival:** `.entra` — rise 10px out of a 4px blur, staggered 45ms per item, capped at 10 slots. Content is visible if the animation never runs.
+- **Route change:** the page column cross-dissolves via React `<ViewTransition default="pagina">`; nav chrome stays still.
+- **Sheets:** backdrop dissolves, panel rises; closing animates out before unmount. Escape closes.
+- **Nav:** the active "puck" slides between tabs (bottom bar and sidebar); the newly active icon pops.
+- **Feedback:** `.tocable` press-scale on every tappable thing; fijos and Ads/Plata status toggles pop when they land on a state; peso totals roll from old to new value; the bell wiggles once when there are alerts; the "Algo cambió" confirmation turns its arrows once ("Plan reacomodado").
+- **Ambient:** the light pools and the empty-state sun (rays turn over 40s, core breathes) are the only loops.
 
 ## Components
 
 ### Buttons
-- **Shape:** 12px radius (`{rounded.md}`)
-- **Primary:** terracota background, hueso text, 12px/20px padding — reserved for the single most important action on a screen (e.g. "Agregar cliente", "Guardar").
-- **Hover / Focus:** background shifts to `terracota-dark`; focus adds a 2px terracota ring offset 2px from the element, never a color change alone.
-- **Secondary / Ghost:** transparent background, carbón text, borde-colored 1px border; used for every non-primary action so the primary stays singular per screen.
+- **Primary** (`.boton-primario`): terracota fill, hueso text, `--shadow-boton`, 12–14px radius; hover lightens slightly. One per screen.
+- **Secondary:** transparent or `bg-elevada/60`, 1px borde border, hover tints with `borde/40`. "Add" affordances that create structure (simulator link, "Agregar fijo") use a dashed border.
+- **Icon buttons:** full-round, hover `borde/50`; destructive ones hover terracota/10.
+- **Focus:** 2px terracota outline, 2px offset, everywhere (`:focus-visible`).
 
 ### Task Row (signature component)
-- A tappable leading circle (checkbox) at left; client name (title weight) + stage/quantity detail (body, secondary color) on two lines; hours estimate right-aligned in label weight.
-- Urgent rows: the whole row background tints to a ~6% terracota wash (never a border), plus a small "hoy"/"mañana" label.
-- Done rows: leading circle fills verde-al-dia, row text drops to secondary color with a strikethrough on the detail line only (not the client name).
+- Animated tick circle at left (see Motion), client color dot + client name (600) on line one with an optional "atrasada" chip, stage/limit detail (0.9375rem, secondary) on line two, hours in a sunken chip at right.
+- Urgent rows: ~6% terracota wash (never a border).
+- Non-tickable units show a document icon instead of the circle.
 
 ### Stage Chip
 - **Style:** background = borde color at 60% opacity, text = carbón/gris-musgo, 8px radius, label-weight text, no icon by default.
@@ -172,8 +253,8 @@ Rounded but not soft-play: 12px radius on interactive containers (buttons, input
 - **Error:** border shifts to terracota, helper text below in terracota, states the problem and the fix (never "invalid input").
 
 ### Navigation
-- **Mobile:** fixed bottom tab bar, 3 items (Hoy / Clientes / Plata), icon + label weight text. Active tab: icon and label in terracota; inactive: gris-musgo. No badge dots — unread/urgent counts are integers in a small label-weight pill instead.
-- **Desktop (≥1024px):** fixed 240px left sidebar with the same 3 items plus Ajustes, vertical instead of horizontal; same active/inactive coloring and integer-pill counter. See Layout → Desktop.
+- **Mobile:** a floating paper bar inset 12px from the edges (22px radius, papel-alto), five tabs (Hoy · Calendario · Clientes · Ads · Plata) with a sliding terracota/11 puck behind the active one. A sticky top bar carries the italic "Paula." wordmark and the alerts bell; the global "+" floats above the bar.
+- **Desktop (≥1024px):** 240px grained sidebar, wordmark at top, same items with a sliding puck, Ajustes pinned at the bottom.
 
 ## Do's and Don'ts
 
@@ -185,6 +266,8 @@ Rounded but not soft-play: 12px radius on interactive containers (buttons, input
 
 ### Don't:
 - **Don't** build the client roster or Hoy list as a card grid or kanban board **on mobile** — these are lists, per PRODUCT.md's Operate mode and the chosen standard-not-bespoke register. (Desktop's roster grid is the one deliberate exception — see Layout → Desktop.)
-- **Don't** add gradients, glassmorphism, progress rings, or sparklines anywhere in this system.
-- **Don't** invent a second accent hue beyond terracota/verde-al-dia/ambar-aviso.
+- **Don't** add gradients beyond the two ambient light pools, gradient text, decorative glass, progress rings or sparklines. (Hoy's client-colored day strip is a meter of real hours, not a decoration.)
+- **Don't** add a second loop animation or a page-load choreography; motion beyond the list in Motion needs a job.
+- **Don't** nest a card inside a paper surface — use a sunken well.
+- **Don't** invent a second accent hue beyond terracota/verde-al-dia/ambar-aviso. Client identification colors come only from the client palette.
 - **Don't** use a colored left-border on any row, card, or alert to signal state — it's an unresolved decision the No-Border Rule already settled.

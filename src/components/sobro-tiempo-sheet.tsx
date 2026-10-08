@@ -1,10 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { Circle } from "lucide-react";
 import { Asignacion } from "@/lib/domain/planner";
 import { completarUnidad, sePuedeTildar } from "@/lib/domain/completar";
 import { Sheet } from "@/components/sheet";
+import { Tilde } from "@/components/tilde";
+import { Sol } from "@/components/empty-state";
 
 /** "Me sobró tiempo": suggests what to bring forward. Ticking one marks the
  * piece done, which shortens the upcoming days on the next derivation. */
@@ -36,28 +37,26 @@ export function SobroTiempoSheet({
           step={0.5}
           value={horasEfectivas}
           onChange={(e) => setHoras(Number(e.target.value))}
-          className="w-20 rounded-[12px] border border-borde bg-bg-elevada px-3 py-2"
+          className="input w-20"
         />
       </label>
 
       {sugeridas.length === 0 ? (
-        <p className="text-[0.9375rem] text-texto-secundario">
-          No hay nada para adelantar que entre en ese tiempo. Disfrutalo.
-        </p>
+        <div className="flex flex-col items-center py-4 text-center">
+          <Sol size={60} />
+          <p className="titulo-serif mt-2 text-[1.125rem] font-medium">Disfrutalo</p>
+          <p className="mt-0.5 text-[0.9375rem] text-texto-secundario">
+            No hay nada para adelantar que entre en ese tiempo.
+          </p>
+        </div>
       ) : (
         <>
           <p className="mb-2 text-[0.8125rem] text-texto-secundario">Podés adelantar:</p>
-          <ul className="flex flex-col divide-y divide-borde border-y border-borde">
+          <ul className="flex flex-col divide-y divide-borde/80 rounded-[16px] bg-bg-hundida px-2">
             {sugeridas.map((a) => (
-              <li key={a.unidad.id} className="flex items-start gap-3 px-1 py-3">
+              <li key={a.unidad.id} className="flex items-start gap-3 px-1.5 py-3">
                 {sePuedeTildar(a.unidad) ? (
-                  <button
-                    onClick={() => completarUnidad(a.unidad)}
-                    className="mt-0.5 shrink-0 text-texto-secundario hover:text-terracota"
-                    aria-label="Marcar como hecho"
-                  >
-                    <Circle size={22} strokeWidth={1.75} />
-                  </button>
+                  <Tilde onTildar={() => completarUnidad(a.unidad)} label="Marcar como adelantada" />
                 ) : (
                   <span className="w-[22px] shrink-0" />
                 )}

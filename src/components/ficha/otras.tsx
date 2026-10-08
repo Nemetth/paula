@@ -221,7 +221,7 @@ function Mensaje({
   const texto = textoMensaje(tipo, { cliente, fechaGrabacion });
   const enlace = enlaceWhatsapp(cliente.contactoWhatsapp, texto);
   return (
-    <li className="rounded-[12px] border border-borde bg-bg-elevada px-4 py-3">
+    <li className="papel px-4 py-3">
       <div className="mb-1 flex items-center justify-between gap-3">
         <p className="font-medium">{titulo}</p>
         {enlace ? (

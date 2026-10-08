@@ -42,10 +42,25 @@ export function diasDeLaSemana(ancla: Date): Date[] {
 }
 
 /** Stable colour per client so it reads the same in every view. */
+/** Earthy, warm-leaning hues that sit with terracota/hueso and stay legible
+ * as dots, monograms and day-strip segments in both themes. */
+const PALETA_CLIENTES = [
+  "#C8623E", // arcilla
+  "#5E8C6A", // salvia
+  "#7A6BB0", // lavanda gris
+  "#C99A3B", // ocre
+  "#3F84A0", // petróleo
+  "#B5577A", // ciruela
+  "#7C8B3A", // oliva
+  "#A0715A", // cuero
+  "#4F6FA8", // azul pizarra
+  "#D07E5B", // durazno tostado
+];
+
 export function colorCliente(clients: Client[], clienteId?: string): string {
   const i = clients.findIndex((c) => c.id === clienteId);
   if (i < 0) return "var(--color-texto-secundario)";
-  return `hsl(${(20 + i * 47) % 360} 55% 48%)`;
+  return PALETA_CLIENTES[i % PALETA_CLIENTES.length];
 }
 
 export interface CierreMes {

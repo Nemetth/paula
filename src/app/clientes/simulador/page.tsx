@@ -16,15 +16,15 @@ export default function SimuladorPage() {
   );
 
   return (
-    <div className="mx-auto max-w-[640px] px-4 pt-6 lg:max-w-[720px] lg:px-8 lg:pt-10">
-      <header className="mb-5 flex items-center gap-3 lg:mb-8">
-        <Link href="/clientes" aria-label="Volver" className="text-texto-secundario">
+    <div className="mx-auto max-w-[640px] px-4 pt-2 lg:max-w-[720px] lg:px-8 lg:pt-4">
+      <header className="entra mb-6 flex items-center gap-3 lg:mb-8">
+        <Link href="/clientes" aria-label="Volver" className="tocable -ml-1.5 rounded-full p-1.5 text-texto-secundario hover:bg-borde/50">
           <ArrowLeft size={20} />
         </Link>
-        <h1 className="text-[1.25rem] font-semibold">Simulador de prospecto</h1>
+        <h1 className="titulo-serif text-[1.875rem] font-medium leading-[1.15] lg:text-[2.25rem]">Simulador de prospecto</h1>
       </header>
 
-      <div className="lg:rounded-[12px] lg:border lg:border-borde lg:bg-bg-elevada lg:p-8">
+      <div className="lg:rounded-[20px] lg:border lg:border-borde lg:bg-bg-elevada lg:p-8 lg:shadow-papel">
       <p className="mb-5 text-[0.9375rem] text-texto-secundario">
         Probá el volumen de un cliente potencial antes de aceptarlo. Esto no crea ningún cliente ni guarda
         nada.
@@ -75,10 +75,10 @@ export default function SimuladorPage() {
         </Field>
       </section>
 
-      <div className="rounded-[12px] border border-borde bg-bg-elevada px-4 py-3">
+      <div className="rounded-[16px] bg-bg-hundida px-4 py-3.5">
         <p className="text-[0.8125rem] font-medium text-texto-secundario">Estimación de carga</p>
-        <p className="font-semibold">
-          {estimacion.horasTotales}h totales{" "}
+        <p className="numeros">
+          <span className="titulo-serif text-[1.75rem] font-medium">{estimacion.horasTotales}</span> h totales{" "}
           <span className="font-normal text-texto-secundario">· ~{estimacion.horasPorSemana}h/semana</span>
         </p>
         <p className="mt-0.5 text-[0.9375rem] text-texto-secundario">
@@ -90,7 +90,7 @@ export default function SimuladorPage() {
 
       <Link
         href="/clientes/nuevo"
-        className="mt-6 block w-full rounded-[12px] bg-terracota px-5 py-3 text-center font-medium text-bg"
+        className="boton-primario tocable mt-6 block w-full rounded-[14px] px-5 py-3.5 text-center font-medium"
       >
         Te sirve — agregar como cliente
       </Link>

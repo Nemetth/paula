@@ -157,7 +157,7 @@ export function ClienteForm({
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-6 pb-10">
-      <div className="rounded-[12px] border border-borde bg-bg-elevada px-4 py-3">
+      <div className="rounded-[16px] bg-bg-hundida px-4 py-3.5">
         <p className="text-[0.8125rem] font-medium text-texto-secundario">Estimación de carga</p>
         <p className="font-semibold">
           {estimacion.horasTotales}h totales <span className="font-normal text-texto-secundario">· ~{estimacion.horasPorSemana}h/semana</span>
@@ -446,7 +446,7 @@ export function ClienteForm({
       <button
         type="submit"
         disabled={saving}
-        className="w-full rounded-[12px] bg-terracota px-5 py-3 text-center font-medium text-bg disabled:opacity-60"
+        className="boton-primario tocable w-full rounded-[14px] px-5 py-3.5 text-center font-medium disabled:opacity-60"
       >
         {saving ? "Guardando..." : submitLabel}
       </button>

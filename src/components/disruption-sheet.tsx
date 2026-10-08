@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { addDays } from "date-fns";
+import { RefreshCw } from "lucide-react";
 import {
   actualizarCliente,
   actualizarGrabacion,
@@ -17,7 +18,7 @@ import { BotonPrimario, OpcionSheet, Sheet } from "@/components/sheet";
 
 type Paso = "menu" | "no-llegue" | "adelante" | "cliente-frenado" | "grabacion" | "no-trabajo" | "horas";
 
-const campo = "rounded-[12px] border border-borde bg-bg-elevada px-3 py-2.5";
+const campo = "input";
 const etiquetaCampo = "text-[0.8125rem] font-medium text-texto-secundario";
 
 export function DisruptionSheet({
@@ -73,8 +74,14 @@ export function DisruptionSheet({
   return (
     <Sheet open={open} title="Algo cambió" onClose={cerrar}>
       {confirmado ? (
-        <div>
-          <p className="text-[0.9375rem]">{confirmado}</p>
+        <div className="flex flex-col items-center pt-2 text-center">
+          <span className="pop mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-verde/12 text-verde">
+            <RefreshCw size={24} strokeWidth={2} className="reacomoda" />
+          </span>
+          <p className="titulo-serif text-[1.25rem] font-medium">Plan reacomodado</p>
+          <p className="entra mt-1 mb-5 max-w-[34ch] text-[0.9375rem] text-texto-secundario" style={{ "--i": 3 } as React.CSSProperties}>
+            {confirmado}
+          </p>
           <BotonPrimario onClick={cerrar}>Listo</BotonPrimario>
         </div>
       ) : paso === "menu" ? (

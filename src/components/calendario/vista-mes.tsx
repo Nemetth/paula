@@ -33,7 +33,7 @@ export function VistaMes({
           <span key={i}>{d}</span>
         ))}
       </div>
-      <div className="grid grid-cols-7 gap-1">
+      <div key={toISODate(ancla).slice(0, 7)} className="aparece grid grid-cols-7 gap-1">
         {grilla.map((d) => {
           const iso = toISODate(d);
           const info = dias[iso];
@@ -50,16 +50,19 @@ export function VistaMes({
               aria-label={`${iso}${sobrecargado ? ", día sobrecargado" : ""}`}
               aria-pressed={seleccionado === iso}
               className={cn(
-                "flex min-h-[64px] flex-col items-center gap-1 rounded-[8px] border px-1 py-1.5 lg:min-h-[88px]",
-                seleccionado === iso ? "border-terracota" : "border-transparent",
-                sobrecargado ? "bg-terracota/15" : "bg-bg-elevada",
+                "tocable flex min-h-[64px] flex-col items-center gap-1 rounded-[12px] border px-1 py-1.5 lg:min-h-[92px]",
+                seleccionado === iso
+                  ? "border-terracota/70 bg-bg-elevada shadow-papel-alto"
+                  : "border-transparent hover:border-borde",
+                seleccionado !== iso && (sobrecargado ? "bg-terracota/15" : "bg-bg-elevada/70 hover:bg-bg-elevada"),
                 fuera && "opacity-40",
               )}
             >
               <span
                 className={cn(
                   "text-[0.8125rem] font-medium",
-                  iso === hoyISO ? "rounded-full bg-terracota px-1.5 text-bg" : "text-texto",
+                  "numeros flex h-6 min-w-6 items-center justify-center rounded-full px-1",
+                  iso === hoyISO ? "bg-terracota text-bg shadow-boton" : "text-texto",
                 )}
               >
                 {d.getDate()}

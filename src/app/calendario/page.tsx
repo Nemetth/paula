@@ -11,6 +11,7 @@ import { toISODate } from "@/lib/domain/dates";
 import { VistaMes } from "@/components/calendario/vista-mes";
 import { VistaSemana } from "@/components/calendario/vista-semana";
 import { DetalleDia } from "@/components/calendario/detalle-dia";
+import { Cargando } from "@/components/empty-state";
 import { cn } from "@/lib/utils";
 
 type Vista = "semana" | "mes";
@@ -44,7 +45,7 @@ export default function CalendarioPage() {
   );
 
   if (!plan || !dias || !clients || !cierre) {
-    return <div className="px-4 py-8 text-texto-secundario">Cargando...</div>;
+    return <Cargando />;
   }
 
   const paso = (dir: 1 | -1) => setAncla((a) => (vista === "mes" ? addMonths(a, dir) : addWeeks(a, dir)));
@@ -68,10 +69,15 @@ export default function CalendarioPage() {
   const nombreMes = format(startOfMonth(ancla), "MMMM", { locale: es });
 
   return (
-    <div className="mx-auto max-w-[640px] px-4 pt-6 lg:max-w-[1180px] lg:px-8 lg:pt-10">
-      <header className="mb-4 flex flex-wrap items-center justify-between gap-3 lg:mb-6">
-        <h1 className="text-[1.25rem] font-semibold">Calendario</h1>
-        <div role="tablist" aria-label="Vista" className="flex rounded-[12px] border border-borde p-0.5">
+    <div className="mx-auto max-w-[640px] px-4 pt-2 lg:max-w-[1180px] lg:px-8 lg:pt-4">
+      <header className="entra mb-5 flex flex-wrap items-center justify-between gap-3 lg:mb-6">
+        <h1 className="titulo-serif text-[1.875rem] font-medium leading-[1.15] lg:text-[2.25rem]">Calendario</h1>
+        <div role="tablist" aria-label="Vista" className="relative flex rounded-[14px] bg-bg-hundida p-1">
+          <span
+            aria-hidden
+            className="absolute bottom-1 left-1 top-1 w-[calc(50%-4px)] rounded-[10px] bg-bg-elevada shadow-papel transition-transform duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]"
+            style={{ transform: vista === "mes" ? "translateX(100%)" : undefined }}
+          />
           {(["semana", "mes"] as Vista[]).map((v) => (
             <button
               key={v}
@@ -79,8 +85,8 @@ export default function CalendarioPage() {
               aria-selected={vista === v}
               onClick={() => setVista(v)}
               className={cn(
-                "rounded-[10px] px-4 py-1.5 text-[0.9375rem] font-medium capitalize",
-                vista === v ? "bg-terracota text-bg" : "text-texto-secundario",
+                "relative w-20 rounded-[10px] py-1.5 text-[0.9375rem] font-medium capitalize transition-colors",
+                vista === v ? "text-texto" : "text-texto-secundario hover:text-texto",
               )}
             >
               {v}
@@ -90,16 +96,16 @@ export default function CalendarioPage() {
       </header>
 
       <div className="mb-4 flex items-center justify-between">
-        <button onClick={() => paso(-1)} aria-label="Anterior" className="p-1 text-texto-secundario">
+        <button onClick={() => paso(-1)} aria-label="Anterior" className="tocable rounded-full p-1.5 text-texto-secundario hover:bg-borde/50">
           <ChevronLeft size={22} />
         </button>
         <div className="flex items-center gap-3">
-          <p className="font-semibold capitalize">{titulo}</p>
-          <button onClick={() => setAncla(today)} className="text-[0.8125rem] font-medium text-terracota">
+          <p key={titulo} className="titulo-serif aparece text-[1.125rem] font-medium capitalize">{titulo}</p>
+          <button onClick={() => setAncla(today)} className="tocable rounded-full bg-terracota/10 px-2.5 py-0.5 text-[0.8125rem] font-medium text-terracota hover:bg-terracota/15">
             Hoy
           </button>
         </div>
-        <button onClick={() => paso(1)} aria-label="Siguiente" className="p-1 text-texto-secundario">
+        <button onClick={() => paso(1)} aria-label="Siguiente" className="tocable rounded-full p-1.5 text-texto-secundario hover:bg-borde/50">
           <ChevronRight size={22} />
         </button>
       </div>
@@ -118,8 +124,8 @@ export default function CalendarioPage() {
           />
           {detalle && <DetalleDia info={detalle} clients={clients} />}
 
-          <section className="mt-6 rounded-[12px] border border-borde bg-bg-elevada px-4 py-3">
-            <h2 className="mb-2 font-semibold">Cierre de {nombreMes}</h2>
+          <section className="papel entra mt-6 px-4 py-3.5">
+            <h2 className="titulo-serif mb-2 text-[1.25rem] font-medium">Cierre de {nombreMes}</h2>
             <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-[0.9375rem]">
               <dt className="text-texto-secundario">Entregadas o programadas</dt>
               <dd className="text-right font-medium">{cierre.entregadas}</dd>

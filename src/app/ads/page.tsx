@@ -21,8 +21,8 @@ import {
 } from "@/lib/domain/ads";
 import { toISODate } from "@/lib/domain/dates";
 import { AdsEstado } from "@/lib/domain/types";
-import { EmptyState } from "@/components/empty-state";
-import { cn } from "@/lib/utils";
+import { Cargando, EmptyState } from "@/components/empty-state";
+import { cn, indice } from "@/lib/utils";
 
 export default function AdsPage() {
   const today = useMemo(() => new Date(), []);
@@ -32,7 +32,7 @@ export default function AdsPage() {
   const reportes = useAdsReportes();
   const [error, setError] = useState<string | null>(null);
 
-  if (!clients) return <div className="px-4 py-8 text-texto-secundario">Cargando...</div>;
+  if (!clients) return <Cargando />;
 
   const cuentas = clientesAds(clients);
   const estadoHoy = new Map((chequeos ?? []).filter((c) => c.fecha === hoyISO).map((c) => [c.clienteId, c.estado]));
@@ -50,12 +50,12 @@ export default function AdsPage() {
   }
 
   return (
-    <div className="mx-auto max-w-[640px] px-4 pt-6 lg:max-w-[880px] lg:px-8 lg:pt-10">
-      <header className="mb-5 lg:mb-8">
-        <p className="text-[0.8125rem] font-medium capitalize text-texto-secundario">
+    <div className="mx-auto max-w-[640px] px-4 pt-2 lg:max-w-[880px] lg:px-8 lg:pt-4">
+      <header className="entra mb-6 lg:mb-8">
+        <p className="text-[0.8125rem] font-medium text-texto-secundario mayuscula">
           {format(today, "EEEE d 'de' MMMM", { locale: es })}
         </p>
-        <h1 className="text-[1.25rem] font-semibold">Ads</h1>
+        <h1 className="titulo-serif text-[1.875rem] font-medium leading-[1.15] lg:text-[2.25rem]">Ads</h1>
       </header>
 
       {error && <p className="mb-4 text-[0.8125rem] text-[var(--color-error)]">{error}</p>}
@@ -66,10 +66,10 @@ export default function AdsPage() {
           detail="Los clientes con servicio Ads o Contenido + Ads aparecen acá."
         />
       ) : (
-        <div className="flex flex-col gap-8">
-          <section>
+        <div className="flex flex-col gap-9">
+          <section className="entra" style={indice(1)}>
             <h2 className="mb-2 text-[0.9375rem] font-semibold">Chequeo de hoy</h2>
-            <ul className="flex flex-col divide-y divide-borde border-y border-borde">
+            <ul className="papel flex flex-col divide-y divide-borde/80 px-1.5">
               {cuentas.map((c) => {
                 const estado = estadoHoy.get(c.id);
                 return (
@@ -95,13 +95,13 @@ export default function AdsPage() {
             </ul>
           </section>
 
-          <section>
+          <section className="entra" style={indice(2)}>
             <h2 className="mb-1 text-[0.9375rem] font-semibold">Revisión a fondo</h2>
             <p className="mb-2 text-[0.8125rem] text-texto-secundario">
               Cada cuenta se revisa a fondo cada {CADENCIA_REVISION_FONDO_DIAS} días. Va rotando: la más atrasada
               aparece en Hoy y es lo primero que se posterga si no entra.
             </p>
-            <ul className="flex flex-col divide-y divide-borde border-y border-borde">
+            <ul className="papel flex flex-col divide-y divide-borde/80 px-1.5">
               {rotacion.map((c) => {
                 const dias = diasDesdeRevision(c, today);
                 const vencida = dias >= CADENCIA_REVISION_FONDO_DIAS;
@@ -115,7 +115,7 @@ export default function AdsPage() {
                     </div>
                     <button
                       onClick={() => guardar(() => actualizarCliente(c.id, { adsUltimaRevision: hoyISO }))}
-                      className="shrink-0 rounded-[8px] border border-borde px-2.5 py-1 text-[0.8125rem] font-medium"
+                      className="tocable shrink-0 rounded-[8px] border border-borde px-2.5 py-1 text-[0.8125rem] font-medium hover:bg-borde/40"
                     >
                       Revisada hoy
                     </button>
@@ -125,7 +125,7 @@ export default function AdsPage() {
             </ul>
           </section>
 
-          <section>
+          <section className="entra" style={indice(3)}>
             <h2 className="mb-1 text-[0.9375rem] font-semibold">
               Reportes de {periodoReporte ? format(parse(periodoReporte, "yyyy-MM", new Date()), "MMMM", { locale: es }) : "el mes"}
             </h2>
@@ -134,7 +134,7 @@ export default function AdsPage() {
                 ? "Se mandan del 1 al 5: estás en plazo."
                 : "Se mandan del 1 al 5 de cada mes."}
             </p>
-            <ul className="flex flex-col divide-y divide-borde border-y border-borde">
+            <ul className="papel flex flex-col divide-y divide-borde/80 px-1.5">
               {filasReporte.map((f) => (
                 <li key={f.cliente.id} className="flex items-center gap-3 px-2 py-3">
                   <p className="min-w-0 flex-1 truncate font-semibold">{f.cliente.nombre}</p>
@@ -145,7 +145,7 @@ export default function AdsPage() {
                       )
                     }
                     className={cn(
-                      "shrink-0 rounded-[8px] px-2.5 py-1 text-[0.8125rem] font-medium",
+                      "tocable shrink-0 rounded-[8px] px-2.5 py-1 text-[0.8125rem] font-medium",
                       f.estado === "enviado" && "bg-verde/15 text-verde",
                       f.estado === "pendiente" && !f.atrasado && "bg-ambar/15 text-ambar",
                       f.atrasado && "bg-terracota/15 text-terracota",
@@ -179,12 +179,12 @@ function Boton({
       onClick={onClick}
       aria-pressed={activo}
       className={cn(
-        "flex shrink-0 items-center gap-1 rounded-[8px] border px-2.5 py-1 text-[0.8125rem] font-medium",
+        "tocable flex shrink-0 items-center gap-1 rounded-[8px] border px-2.5 py-1 text-[0.8125rem] font-medium",
         activo
           ? tono === "verde"
-            ? "border-verde/30 bg-verde/15 text-verde"
-            : "border-terracota/30 bg-terracota/15 text-terracota"
-          : "border-borde text-texto-secundario",
+            ? "pop border-verde/30 bg-verde/15 text-verde"
+            : "pop border-terracota/30 bg-terracota/15 text-terracota"
+          : "border-borde text-texto-secundario hover:bg-borde/40",
       )}
     >
       {children}

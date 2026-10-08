@@ -26,6 +26,7 @@ import {
 import { toISODate } from "@/lib/domain/dates";
 import { ESTADO_CLIENTE_LABEL, TIPO_CLIENTE_LABEL } from "@/lib/domain/labels";
 import { ClienteEstado } from "@/lib/domain/types";
+import { Cargando } from "@/components/empty-state";
 
 export default function ClienteDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -41,7 +42,7 @@ export default function ClienteDetailPage() {
   const cobros = useCobros();
   const cliente = clients?.find((c) => c.id === id);
 
-  if (clients === undefined) return <div className="px-4 py-8 text-texto-secundario">Cargando...</div>;
+  if (clients === undefined) return <Cargando />;
   if (!cliente) {
     return <div className="px-4 py-8 text-texto-secundario">No se encontró el cliente.</div>;
   }
@@ -51,14 +52,14 @@ export default function ClienteDetailPage() {
 
   if (editando) {
     return (
-      <div className="mx-auto max-w-[640px] px-4 pt-6 lg:max-w-[720px] lg:px-8 lg:pt-10">
-        <header className="mb-5 flex items-center gap-3 lg:mb-8">
-          <button onClick={() => setEditando(false)} aria-label="Volver" className="text-texto-secundario">
+      <div className="mx-auto max-w-[640px] px-4 pt-2 lg:max-w-[720px] lg:px-8 lg:pt-4">
+        <header className="entra mb-6 flex items-center gap-3 lg:mb-8">
+          <button onClick={() => setEditando(false)} aria-label="Volver" className="tocable -ml-1.5 rounded-full p-1.5 text-texto-secundario hover:bg-borde/50">
             <ArrowLeft size={20} />
           </button>
-          <h1 className="text-[1.25rem] font-semibold">Editar {cliente.nombre}</h1>
+          <h1 className="titulo-serif text-[1.875rem] font-medium leading-[1.15] lg:text-[2.25rem]">Editar {cliente.nombre}</h1>
         </header>
-        <div className="lg:rounded-[12px] lg:border lg:border-borde lg:bg-bg-elevada lg:p-8">
+        <div className="lg:rounded-[20px] lg:border lg:border-borde lg:bg-bg-elevada lg:p-8 lg:shadow-papel">
           <ClienteForm
             initial={cliente}
             submitLabel="Guardar cambios"
@@ -73,13 +74,13 @@ export default function ClienteDetailPage() {
   }
 
   return (
-    <div className="mx-auto max-w-[640px] px-4 pt-6 lg:max-w-[720px] lg:px-8 lg:pt-10">
-      <header className="mb-5 flex items-center gap-3 lg:mb-8">
-        <Link href="/clientes" aria-label="Volver" className="text-texto-secundario">
+    <div className="mx-auto max-w-[640px] px-4 pt-2 lg:max-w-[720px] lg:px-8 lg:pt-4">
+      <header className="entra mb-6 flex items-center gap-3 lg:mb-8">
+        <Link href="/clientes" aria-label="Volver" className="tocable -ml-1.5 rounded-full p-1.5 text-texto-secundario hover:bg-borde/50">
           <ArrowLeft size={20} />
         </Link>
-        <h1 className="flex-1 truncate text-[1.25rem] font-semibold">{cliente.nombre}</h1>
-        <button onClick={() => setEditando(true)} aria-label="Editar" className="text-texto-secundario">
+        <h1 className="flex-1 truncate titulo-serif text-[1.875rem] font-medium leading-[1.15] lg:text-[2.25rem]">{cliente.nombre}</h1>
+        <button onClick={() => setEditando(true)} aria-label="Editar" className="tocable rounded-full p-2 text-texto-secundario hover:bg-borde/50">
           <Pencil size={19} />
         </button>
         <button
@@ -95,14 +96,14 @@ export default function ClienteDetailPage() {
             }
           }}
           aria-label="Eliminar"
-          className="text-texto-secundario"
+          className="tocable rounded-full p-2 text-texto-secundario hover:bg-terracota/10 hover:text-terracota"
         >
           <Trash2 size={19} />
         </button>
       </header>
 
-      <div className="lg:rounded-[12px] lg:border lg:border-borde lg:bg-bg-elevada lg:p-8">
-        <div className="mb-6 flex flex-wrap items-center gap-2">
+      <div className="entra" style={{ "--i": 1 } as React.CSSProperties}>
+        <div className="mb-8 flex flex-wrap items-center gap-2">
           <select
             value={cliente.estado}
             onChange={(e) => actualizarCliente(cliente.id, { estado: e.target.value as ClienteEstado })}

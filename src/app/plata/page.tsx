@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { Trash2 } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { ChevronDown, Trash2 } from "lucide-react";
 import { endOfMonth, format } from "date-fns";
 import { es } from "date-fns/locale";
 import {
@@ -18,7 +18,7 @@ import { CobroEstado } from "@/lib/domain/types";
 import { estadoCobro } from "@/lib/domain/cobros";
 import { toISODate } from "@/lib/domain/dates";
 import { EmptyState } from "@/components/empty-state";
-import { cn } from "@/lib/utils";
+import { cn, indice } from "@/lib/utils";
 
 const ESTADO_LABEL: Record<CobroEstado, string> = {
   pendiente: "Pendiente",
@@ -75,27 +75,33 @@ export default function PlataPage() {
     .reduce((sum, f) => sum + (f.cobro.monto ?? 0), 0);
 
   return (
-    <div className="mx-auto max-w-[640px] px-4 pt-6 lg:max-w-[880px] lg:px-8 lg:pt-10">
-      <header className="mb-5 lg:mb-8">
-        <p className="text-[0.8125rem] font-medium capitalize text-texto-secundario">
+    <div className="mx-auto max-w-[640px] px-4 pt-2 lg:max-w-[880px] lg:px-8 lg:pt-4">
+      <header className="entra mb-6 lg:mb-8">
+        <p className="text-[0.8125rem] font-medium text-texto-secundario mayuscula">
           {format(new Date(), "MMMM yyyy", { locale: es })}
         </p>
-        <h1 className="text-[1.25rem] font-semibold">Plata</h1>
+        <h1 className="titulo-serif text-[1.875rem] font-medium leading-[1.15] lg:text-[2.25rem]">Plata</h1>
       </header>
 
-      {totalPendiente > 0 && (
-        <div className="mb-5 flex flex-col gap-3 lg:mb-8 lg:flex-row">
-          <StatCard label="Por cobrar este mes" valor={totalPendiente} />
-          {totalVencido > 0 && <StatCard label="Vencido" valor={totalVencido} tono="terracota" />}
+      <div className="mb-7 grid gap-3 lg:grid-cols-[1fr_1.6fr]">
+        <div className="papel entra px-4 py-3.5" style={indice(1)}>
+          <p className="text-[0.8125rem] text-texto-secundario">Por cobrar este mes</p>
+          <Monto valor={totalPendiente} className="text-[1.75rem]" />
+          {totalVencido > 0 ? (
+            <p className="numeros text-[0.8125rem] font-medium text-terracota">
+              ${totalVencido.toLocaleString("es-AR")} vencido
+            </p>
+          ) : (
+            <p className="text-[0.8125rem] text-texto-secundario">Nada vencido</p>
+          )}
         </div>
-      )}
-
-      <BalanceCard cobros={cobrosTodos ?? []} gastos={gastos ?? []} periodo={periodo} />
+        <BalanceCard cobros={cobrosTodos ?? []} gastos={gastos ?? []} periodo={periodo} />
+      </div>
 
       {filas.length === 0 ? (
         <EmptyState title="Nada para cobrar todavía" detail="Los cobros del mes aparecen acá una vez que tengas clientes activos." />
       ) : (
-        <ul className="flex flex-col divide-y divide-borde border-y border-borde lg:rounded-[12px] lg:border lg:border-borde lg:bg-bg-elevada lg:px-3">
+        <ul className="papel entra flex flex-col divide-y divide-borde/80 px-1.5">
           {filas.map(({ cobro, cliente, estado }) => (
             <li key={cobro.id} className="flex items-center gap-3 px-2 py-3.5">
               <div className="min-w-0 flex-1">
@@ -113,8 +119,8 @@ export default function PlataPage() {
                   })
                 }
                 className={cn(
-                  "shrink-0 rounded-[8px] px-2.5 py-1 text-[0.8125rem] font-medium",
-                  estado === "pagado" && "bg-verde/15 text-verde",
+                  "tocable shrink-0 rounded-[8px] px-2.5 py-1 text-[0.8125rem] font-medium",
+                  estado === "pagado" && "pop bg-verde/15 text-verde",
                   estado === "vencido" && "bg-terracota/15 text-terracota",
                   estado === "pendiente" && "bg-ambar/15 text-ambar",
                 )}
@@ -144,7 +150,7 @@ function BalanceCard({
 }) {
   const { cobrado, gastado, queda } = balanceDelMes(cobros, gastos, periodo);
   return (
-    <div className="mb-5 flex flex-col gap-3 lg:mb-8 lg:flex-row">
+    <div className="papel entra grid grid-cols-1 divide-y divide-borde/80 sm:grid-cols-3 sm:divide-x sm:divide-y-0 sm:py-3.5" style={indice(2)}>
       <StatCard label="Cobrado" valor={cobrado} tono="verde" />
       <StatCard label="Gastos" valor={gastado} />
       <StatCard label="Me queda" valor={queda} tono={queda < 0 ? "terracota" : "neutral"} />
@@ -176,14 +182,14 @@ function GastosSection({ gastos }: { gastos: NonNullable<ReturnType<typeof useGa
 
   return (
     <section className="mt-8">
-      <h2 className="mb-2 text-[0.9375rem] font-semibold">Gastos del mes</h2>
+      <h2 className="titulo-serif mb-2 text-[1.25rem] font-medium">Gastos del mes</h2>
       <form onSubmit={agregar} className="mb-3 flex gap-2">
         <input
           value={concepto}
           onChange={(e) => setConcepto(e.target.value)}
           placeholder="Concepto"
           aria-label="Concepto del gasto"
-          className="min-w-0 flex-1 rounded-[12px] border border-borde bg-bg-elevada px-3 py-2.5"
+          className="input min-w-0 flex-1"
         />
         <input
           type="number"
@@ -192,20 +198,20 @@ function GastosSection({ gastos }: { gastos: NonNullable<ReturnType<typeof useGa
           onChange={(e) => setMonto(e.target.value)}
           placeholder="$"
           aria-label="Monto del gasto"
-          className="w-28 rounded-[12px] border border-borde bg-bg-elevada px-3 py-2.5"
+          className="input w-28"
         />
-        <button type="submit" className="rounded-[12px] bg-terracota px-4 py-2.5 font-medium text-bg">
+        <button type="submit" className="boton-primario tocable rounded-[12px] px-4 py-2.5 font-medium">
           Agregar
         </button>
       </form>
       {error && <p className="mb-2 text-[0.8125rem] text-[var(--color-error)]">{error}</p>}
       {gastos.length > 0 && (
-        <ul className="flex flex-col divide-y divide-borde border-y border-borde">
+        <ul className="papel flex flex-col divide-y divide-borde/80 px-1.5">
           {gastos.map((g) => (
             <li key={g.id} className="flex items-center gap-3 px-2 py-3">
               <p className="min-w-0 flex-1 truncate">{g.concepto}</p>
               <p className="text-[0.9375rem] font-medium">${g.monto.toLocaleString("es-AR")}</p>
-              <button onClick={() => eliminarGasto(g.id)} aria-label="Eliminar gasto" className="text-texto-secundario">
+              <button onClick={() => eliminarGasto(g.id)} aria-label="Eliminar gasto" className="tocable rounded-full p-1.5 text-texto-secundario hover:bg-terracota/10 hover:text-terracota">
                 <Trash2 size={16} />
               </button>
             </li>
@@ -226,9 +232,9 @@ function AumentosSection({ clients }: { clients: NonNullable<ReturnType<typeof u
 
   return (
     <section className="mt-8">
-      <h2 className="mb-1 text-[0.9375rem] font-semibold">Próximo aumento</h2>
+      <h2 className="titulo-serif mb-1 text-[1.25rem] font-medium">Próximo aumento</h2>
       <p className="mb-2 text-[0.8125rem] text-texto-secundario">Toca cada 3 meses desde el último aumento.</p>
-      <ul className="flex flex-col divide-y divide-borde border-y border-borde">
+      <ul className="papel flex flex-col divide-y divide-borde/80 px-1.5">
         {filas.map(({ c, prox }) => (
           <li key={c.id} className="flex items-center gap-3 px-2 py-3">
             <div className="min-w-0 flex-1">
@@ -239,7 +245,7 @@ function AumentosSection({ clients }: { clients: NonNullable<ReturnType<typeof u
             </div>
             <button
               onClick={() => actualizarCliente(c.id, { ultimoAumento: toISODate(hoy) })}
-              className="shrink-0 rounded-[8px] border border-borde px-2.5 py-1 text-[0.8125rem] font-medium"
+              className="tocable shrink-0 rounded-[8px] border border-borde px-2.5 py-1 text-[0.8125rem] font-medium hover:bg-borde/40"
             >
               Aplicado hoy
             </button>
@@ -262,12 +268,15 @@ function HistorialSection({
   if (conCobros.length === 0) return null;
   return (
     <section className="mt-8 pb-6">
-      <h2 className="mb-2 text-[0.9375rem] font-semibold">Historial por cliente</h2>
-      <ul className="flex flex-col divide-y divide-borde border-y border-borde">
+      <h2 className="titulo-serif mb-2 text-[1.25rem] font-medium">Historial por cliente</h2>
+      <ul className="papel flex flex-col divide-y divide-borde/80 px-1.5">
         {conCobros.map((c) => (
           <li key={c.id}>
-            <details className="px-2 py-3">
-              <summary className="cursor-pointer font-semibold">{c.nombre}</summary>
+            <details className="group px-2 py-3">
+              <summary className="flex cursor-pointer list-none items-center justify-between font-semibold [&::-webkit-details-marker]:hidden">
+                {c.nombre}
+                <ChevronDown size={16} className="text-texto-secundario transition-transform duration-300 group-open:rotate-180" />
+              </summary>
               <ul className="mt-2 flex flex-col gap-1.5">
                 {cobros
                   .filter((x) => x.clienteId === c.id)
@@ -300,17 +309,47 @@ function StatCard({
   tono?: "neutral" | "terracota" | "verde";
 }) {
   return (
-    <div className="flex-1 rounded-[12px] border border-borde bg-bg-elevada px-4 py-3">
+    <div className="flex min-w-0 items-baseline justify-between gap-3 px-4 py-2.5 sm:block sm:py-0">
       <p className="text-[0.8125rem] text-texto-secundario">{label}</p>
-      <p
+      <Monto
+        valor={valor}
         className={cn(
-          "font-semibold",
+          "text-[1.125rem] sm:text-[1.25rem]",
           tono === "terracota" && "text-terracota",
           tono === "verde" && "text-verde",
         )}
-      >
-        ${valor.toLocaleString("es-AR")}
-      </p>
+      />
     </div>
+  );
+}
+
+/** A peso amount that rolls from its last value to the new one, so marking a
+ * cobro "pagado" visibly moves the totals instead of silently swapping them. */
+function Monto({ valor, className }: { valor: number; className?: string }) {
+  const [mostrado, setMostrado] = useState(valor);
+  const desde = useRef(valor);
+
+  useEffect(() => {
+    const inicio = desde.current;
+    if (inicio === valor) return;
+    const quieto = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const t0 = performance.now();
+    let raf = 0;
+    const paso = (t: number) => {
+      const k = quieto ? 1 : Math.min((t - t0) / 700, 1);
+      const e = 1 - Math.pow(1 - k, 4);
+      const v = Math.round(inicio + (valor - inicio) * e);
+      desde.current = v;
+      setMostrado(v);
+      if (k < 1) raf = requestAnimationFrame(paso);
+    };
+    raf = requestAnimationFrame(paso);
+    return () => cancelAnimationFrame(raf);
+  }, [valor]);
+
+  return (
+    <p className={cn("titulo-serif numeros truncate font-medium leading-tight", className)}>
+      ${mostrado.toLocaleString("es-AR")}
+    </p>
   );
 }

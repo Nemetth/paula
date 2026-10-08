@@ -73,22 +73,22 @@ export default function AjustesPage() {
   }
 
   return (
-    <div className="mx-auto max-w-[640px] px-4 pt-6 lg:max-w-[720px] lg:px-8 lg:pt-10">
-      <header className="mb-5 flex items-center gap-3 lg:mb-8">
-        <Link href="/hoy" aria-label="Volver" className="text-texto-secundario lg:hidden">
+    <div className="mx-auto max-w-[640px] px-4 pt-2 lg:max-w-[720px] lg:px-8 lg:pt-4">
+      <header className="entra mb-6 flex items-center gap-3 lg:mb-8">
+        <Link href="/hoy" aria-label="Volver" className="tocable -ml-1.5 rounded-full p-1.5 text-texto-secundario hover:bg-borde/50 lg:hidden">
           <ArrowLeft size={20} />
         </Link>
-        <h1 className="text-[1.25rem] font-semibold">Ajustes</h1>
+        <h1 className="titulo-serif text-[1.875rem] font-medium leading-[1.15] lg:text-[2.25rem]">Ajustes</h1>
       </header>
 
-      <form onSubmit={handleSubmit} className="flex flex-col gap-6 pb-10 lg:rounded-[12px] lg:border lg:border-borde lg:bg-bg-elevada lg:p-8">
+      <form onSubmit={handleSubmit} className="entra flex flex-col gap-8 pb-10">
         <section>
           <h2 className="mb-1 text-[0.9375rem] font-semibold">Tu semana</h2>
           <p className="mb-3 text-[0.8125rem] text-texto-secundario">
             Cuántas horas trabajás cada día y cuáles son tus días de grabación habituales. A esto se le
             restan los fijos de todos los días para saber cuántas horas libres quedan para producir.
           </p>
-          <ul className="flex flex-col divide-y divide-borde border-y border-borde">
+          <ul className="papel flex flex-col divide-y divide-borde/80 px-1.5">
             {DIAS.map(({ valor, label }) => (
               <li key={valor} className="flex items-center gap-3 px-2 py-3">
                 <span className="w-24 shrink-0 text-[0.9375rem] font-medium">{label}</span>
@@ -123,7 +123,7 @@ export default function AjustesPage() {
             Cuánto tardás en cada una. Son el punto de partida: a medida que cargás horas reales en las piezas, la
             app ajusta sola el tiempo de edición.
           </p>
-          <ul className="flex flex-col divide-y divide-borde border-y border-borde">
+          <ul className="papel flex flex-col divide-y divide-borde/80 px-1.5">
             {(["historia", "posteo", "reel"] as PieceType[]).map((tipo) => (
               <li key={tipo} className="flex flex-wrap items-center gap-3 px-2 py-3">
                 <span className="w-20 shrink-0 text-[0.9375rem] font-medium capitalize">{tipo}</span>
@@ -163,7 +163,7 @@ export default function AjustesPage() {
             horas de cada día laboral y nunca se mueven.
           </p>
           {fijos.length > 0 && (
-            <ul className="mb-3 flex flex-col divide-y divide-borde border-y border-borde">
+            <ul className="mb-3 papel flex flex-col divide-y divide-borde/80 px-1.5">
               {fijos.map((f) => (
                 <li key={f.id} className="flex items-center gap-3 px-2 py-3">
                   <input
@@ -200,7 +200,7 @@ export default function AjustesPage() {
           <button
             type="button"
             onClick={agregarFijo}
-            className="rounded-[12px] border border-borde px-4 py-2.5 text-[0.9375rem] font-medium"
+            className="tocable rounded-[12px] border border-dashed border-borde px-4 py-2.5 text-[0.9375rem] font-medium hover:border-terracota/50 hover:text-terracota"
           >
             Agregar fijo
           </button>
@@ -209,7 +209,7 @@ export default function AjustesPage() {
         <button
           type="submit"
           disabled={saving}
-          className="w-full rounded-[12px] bg-terracota px-5 py-3 text-center font-medium text-bg disabled:opacity-60"
+          className="boton-primario tocable sticky bottom-[calc(96px+env(safe-area-inset-bottom,0px))] z-20 w-full rounded-[14px] px-5 py-3.5 text-center font-medium disabled:opacity-60 lg:bottom-6"
         >
           {saving ? "Guardando..." : guardado ? "Guardado" : "Guardar cambios"}
         </button>

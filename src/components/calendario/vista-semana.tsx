@@ -38,7 +38,7 @@ export function VistaSemana({
   return (
     <div>
       <div className="-mx-4 overflow-x-auto px-4 pb-2 lg:mx-0 lg:overflow-visible lg:px-0">
-        <div className="grid min-w-[1120px] grid-cols-7 gap-2 lg:min-w-0">
+        <div key={toISODate(semana[0])} className="aparece grid min-w-[1120px] grid-cols-7 gap-2 lg:min-w-0">
           {semana.map((d) => {
             const iso = toISODate(d);
             const info = dias[iso];
@@ -59,8 +59,9 @@ export function VistaSemana({
                 }}
                 aria-label={format(d, "EEEE d", { locale: es })}
                 className={cn(
-                  "flex min-h-[200px] flex-col rounded-[12px] border bg-bg-elevada p-2",
-                  sobre === iso ? "border-terracota" : "border-borde",
+                  "papel flex min-h-[200px] flex-col p-2 transition-[transform,box-shadow,border-color] duration-300",
+                  sobre === iso && "-translate-y-1 border-terracota/60 shadow-papel-alto",
+                  iso === hoyISO && "ring-2 ring-terracota/25",
                 )}
               >
                 <header className="mb-2 flex items-center justify-between">
@@ -94,8 +95,8 @@ export function VistaSemana({
                           if (t.unidad.piezaId) e.dataTransfer.setData("text/pieza", t.unidad.piezaId);
                         }}
                         className={cn(
-                          "rounded-[8px] bg-bg px-2 py-1.5 text-[0.8125rem]",
-                          arrastrable && "cursor-grab",
+                          "rounded-[10px] bg-bg-hundida px-2 py-1.5 text-[0.8125rem] transition-[transform,box-shadow]",
+                          arrastrable && "cursor-grab hover:-translate-y-px hover:shadow-papel active:cursor-grabbing",
                           t.atrasada && "bg-terracota/10",
                         )}
                       >
