@@ -53,6 +53,34 @@ export interface FlujoConfig {
   diasMargenCierre: number;
   /** Length in days of one period, only used when cicloTipo === "personalizado". */
   duracionPeriodoDias?: number;
+  /** When this client's pieces can start being produced. Defaults from tieneGrabacion. */
+  inicioDesde?: InicioDesde;
+  /** Fixed start date, only used when inicioDesde === "fecha". */
+  inicioFecha?: string;
+  /** Days before each delivery Paula wants the pieces finished (the "fecha objetivo"). */
+  margenDias?: number;
+}
+
+/** What unlocks production for a client:
+ * - aprobacion: as soon as the calendar (each piece) is approved;
+ * - grabacion: the day after the recording its pieces come from;
+ * - fecha: not before a fixed date. */
+export type InicioDesde = "aprobacion" | "grabacion" | "fecha";
+
+export const DEFAULT_MARGEN_DIAS = 1;
+
+export function inicioPorDefecto(flujo: FlujoConfig, tipo: ClienteTipo): InicioDesde {
+  if (flujo.inicioDesde) return flujo.inicioDesde;
+  const sinGrabacion = tipo === "material-cliente" || tipo === "pedidos-diarios" || tipo === "pack";
+  return flujo.tieneGrabacion && !sinGrabacion ? "grabacion" : "aprobacion";
+}
+
+export function inicioDe(client: Client): InicioDesde {
+  return inicioPorDefecto(client.flujo, client.tipo);
+}
+
+export function margenDe(client: Client): number {
+  return Math.max(client.flujo.margenDias ?? DEFAULT_MARGEN_DIAS, 0);
 }
 
 /** What kind of engagement this is. Drives how its pieces are produced:
@@ -144,8 +172,33 @@ export interface EstructuraSemanal {
   fijosDiarios?: FijoDiario[];
   /** Fixed activities on a specific weekday (e.g. a weekly meeting). */
   actividadesFijas?: ActividadFija[];
-  /** Hours per piece type, edited in Ajustes. Learned real hours are blended on top. */
+  /** Legacy hours per piece type; the plan now counts pieces (see pesoPieza). */
   tiemposPieza?: TiemposPieza;
+  /** Weekdays Paula works. When absent, the weekdays with hours > 0 in horasPorDia. */
+  diasTrabajo?: number[];
+  /** How much work fits in one day, counted in pieces (weighted by pesoPieza). */
+  topePiezasDia?: number;
+  /** How many "pieces" each type counts as (e.g. a reel = 2 historias). */
+  pesoPieza?: Record<PieceType, number>;
+}
+
+export const DEFAULT_TOPE_PIEZAS_DIA = 6;
+
+export const DEFAULT_PESO_PIEZA: Record<PieceType, number> = { historia: 1, posteo: 1, reel: 2 };
+
+export function diasDeTrabajo(e: EstructuraSemanal): number[] {
+  if (e.diasTrabajo) return e.diasTrabajo;
+  return Object.entries(e.horasPorDia)
+    .filter(([, h]) => h > 0)
+    .map(([d]) => Number(d));
+}
+
+export function topePiezas(e: EstructuraSemanal): number {
+  return e.topePiezasDia ?? DEFAULT_TOPE_PIEZAS_DIA;
+}
+
+export function pesosPieza(e: EstructuraSemanal): Record<PieceType, number> {
+  return { ...DEFAULT_PESO_PIEZA, ...e.pesoPieza };
 }
 
 export interface FijoDiario {

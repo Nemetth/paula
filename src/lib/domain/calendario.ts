@@ -67,16 +67,15 @@ export interface CierreMes {
   periodo: string; // yyyy-MM
   entregadas: number;
   pendientes: number;
-  horasPlanificadas: number;
-  capacidadHoras: number;
-  /** Real hours logged on this month's pieces. */
-  horasReales: number;
+  /** Planned load and capacity, in pieces. */
+  cargaPlanificada: number;
+  capacidad: number;
   diasLibres: number;
 }
 
 /** Month close: what was delivered, what's left, planned load vs capacity, and
- * free days. Planned hours and free days only cover days from today on (the plan
- * has no memory of past days); real hours come from what was logged on pieces. */
+ * free days. Planned load and free days only cover days from today on (the plan
+ * has no memory of past days). */
 export function cierreDelMes(
   ancla: Date,
   piezas: Pieza[],
@@ -90,23 +89,21 @@ export function cierreDelMes(
   });
   const entregadas = delMes.filter((p) => p.estado === "entregada" || p.estado === "programada").length;
 
-  let horas = 0;
+  let carga = 0;
   let capacidad = 0;
   let libres = 0;
   for (const c of Object.values(plan.cargaPorDia)) {
     if (!c.fecha.startsWith(periodo)) continue;
-    horas += c.horas;
+    carga += c.carga;
     capacidad += c.capacidad;
-    if (c.capacidad > 0 && c.horas === 0) libres += 1;
+    if (c.capacidad > 0 && c.carga === 0) libres += 1;
   }
-  const horasReales = delMes.reduce((s, p) => s + (p.horasReales ?? 0), 0);
   return {
     periodo,
     entregadas,
     pendientes: delMes.length - entregadas,
-    horasPlanificadas: Math.round(horas * 10) / 10,
-    capacidadHoras: Math.round(capacidad * 10) / 10,
-    horasReales: Math.round(horasReales * 10) / 10,
+    cargaPlanificada: Math.round(carga * 10) / 10,
+    capacidad: Math.round(capacidad * 10) / 10,
     diasLibres: libres,
   };
 }

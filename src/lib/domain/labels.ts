@@ -1,4 +1,4 @@
-import { ClienteEstado, ClienteTipo, PiezaEstado } from "./types";
+import { ClienteEstado, ClienteTipo, PieceType, PiezaEstado } from "./types";
 
 export const ESTADO_CLIENTE_LABEL: Record<ClienteEstado, string> = {
   "al-dia": "Al día",
@@ -24,3 +24,14 @@ export const ESTADO_PIEZA_LABEL: Record<PiezaEstado, string> = {
   entregada: "Entregada",
   programada: "Programada",
 };
+
+export const TIPO_PIEZA_LABEL: Record<PieceType, { uno: string; varios: string }> = {
+  historia: { uno: "historia", varios: "historias" },
+  posteo: { uno: "posteo", varios: "posteos" },
+  reel: { uno: "reel", varios: "reels" },
+};
+
+/** "1 reel", "2 posteos". */
+export function cantidadPiezas(n: number, tipo: PieceType): string {
+  return `${n} ${n === 1 ? TIPO_PIEZA_LABEL[tipo].uno : TIPO_PIEZA_LABEL[tipo].varios}`;
+}

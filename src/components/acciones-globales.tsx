@@ -135,7 +135,6 @@ function FormTarea({
   onClose: () => void;
 }) {
   const [titulo, setTitulo] = useState("");
-  const [horas, setHoras] = useState(0.5);
   const [fechaLimite, setFechaLimite] = useState("");
   const [clienteId, setClienteId] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -146,16 +145,12 @@ function FormTarea({
       setError("Poné qué hay que hacer.");
       return;
     }
-    if (!(horas > 0)) {
-      setError("Las horas tienen que ser mayores a 0.");
-      return;
-    }
     setError(null);
     setGuardando(true);
     try {
       await crearTarea({
         titulo: titulo.trim(),
-        horas,
+        horas: 1,
         fechaLimite: fechaLimite || undefined,
         clienteId: clienteId || undefined,
       });
@@ -173,23 +168,10 @@ function FormTarea({
           <span className={etiqueta}>¿Qué hay que hacer?</span>
           <input value={titulo} onChange={(e) => setTitulo(e.target.value)} className={campo} autoFocus />
         </label>
-        <div className="grid grid-cols-2 gap-3">
-          <label className="flex flex-col gap-1">
-            <span className={etiqueta}>Horas</span>
-            <input
-              type="number"
-              min={0.25}
-              step={0.25}
-              value={horas}
-              onChange={(e) => setHoras(Number(e.target.value))}
-              className={campo}
-            />
-          </label>
-          <label className="flex flex-col gap-1">
-            <span className={etiqueta}>Para el (opcional)</span>
-            <input type="date" value={fechaLimite} onChange={(e) => setFechaLimite(e.target.value)} className={campo} />
-          </label>
-        </div>
+        <label className="flex flex-col gap-1">
+          <span className={etiqueta}>Para el (opcional)</span>
+          <input type="date" value={fechaLimite} onChange={(e) => setFechaLimite(e.target.value)} className={campo} />
+        </label>
         <label className="flex flex-col gap-1">
           <span className={etiqueta}>Cliente (opcional)</span>
           <select value={clienteId} onChange={(e) => setClienteId(e.target.value)} className={campo}>
@@ -202,7 +184,7 @@ function FormTarea({
           </select>
         </label>
         <p className="text-[0.8125rem] text-texto-secundario">
-          Entra al plan en el primer día con lugar, antes de su fecha si la tiene.
+          Cuenta como una pieza y entra al plan en el primer día con lugar, antes de su fecha si la tiene.
         </p>
         {error && <p className="text-[0.8125rem] text-[var(--color-error)]">{error}</p>}
         <BotonPrimario onClick={guardar} disabled={guardando}>

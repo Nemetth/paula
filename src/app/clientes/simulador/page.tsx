@@ -1,19 +1,13 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
-import { simularCarga } from "@/lib/domain/schedule-engine";
+import { EstimacionCarga } from "@/components/estimacion-carga";
 import { VolumenMensual } from "@/lib/domain/types";
 
 export default function SimuladorPage() {
   const [volumenMensual, setVolumenMensual] = useState<VolumenMensual>({ historias: 0, posteos: 0, reels: 0 });
-  const [diasProduccion, setDiasProduccion] = useState(8);
-
-  const estimacion = useMemo(
-    () => simularCarga({ volumenMensual, diasProduccion }),
-    [volumenMensual, diasProduccion],
-  );
 
   return (
     <div className="mx-auto max-w-[640px] px-4 pt-2 lg:max-w-[720px] lg:px-8 lg:pt-4">
@@ -63,30 +57,7 @@ export default function SimuladorPage() {
         </div>
       </section>
 
-      <section className="mb-6">
-        <Field label="Días hábiles para producir las piezas">
-          <input
-            type="number"
-            min={1}
-            value={diasProduccion}
-            onChange={(e) => setDiasProduccion(Number(e.target.value))}
-            className="input"
-          />
-        </Field>
-      </section>
-
-      <div className="rounded-[16px] bg-bg-hundida px-4 py-3.5">
-        <p className="text-[0.8125rem] font-medium text-texto-secundario">Estimación de carga</p>
-        <p className="numeros">
-          <span className="titulo-serif text-[1.75rem] font-medium">{estimacion.horasTotales}</span> h totales{" "}
-          <span className="font-normal text-texto-secundario">· ~{estimacion.horasPorSemana}h/semana</span>
-        </p>
-        <p className="mt-0.5 text-[0.9375rem] text-texto-secundario">
-          {estimacion.horasPorSemana > 40
-            ? "Esto solo ya supera tu tope semanal de 40h — con tu cartera actual encima, probablemente no entra."
-            : "Revisá si esto entra en tu semana junto con el resto de tu cartera antes de aceptar."}
-        </p>
-      </div>
+      <EstimacionCarga volumen={volumenMensual} />
 
       <Link
         href="/clientes/nuevo"

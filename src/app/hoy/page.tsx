@@ -4,32 +4,23 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
-import {
-  AlertTriangle,
-  Check,
-  FileText,
-  MessageCircle,
-  PackageCheck,
-  Settings,
-  Sparkles,
-  Video,
-} from "lucide-react";
+import { AlertTriangle, Check, FileText, MessageCircle, PackageCheck, Presentation, Settings, Video } from "lucide-react";
 import { ensureSettings, marcarFijo, marcarMensajeHecho, useFijosHechos, useMensajesHechos } from "@/lib/supabase/data";
 import { usePlan } from "@/lib/supabase/use-plan";
-import { Asignacion, sugerirAdelanto, tareasDelDia } from "@/lib/domain/planner";
+import { Asignacion, fmtPiezas, sugerirAdelanto, tareasDelDia } from "@/lib/domain/planner";
+import { GrupoCliente, agruparPorCliente, esUrgente } from "@/lib/domain/hoy";
 import { mensajesPendientes } from "@/lib/domain/mensajes";
 import { completarUnidad, sePuedeTildar } from "@/lib/domain/completar";
-import { toISODate } from "@/lib/domain/dates";
+import { fromISODate, toISODate } from "@/lib/domain/dates";
 import { cobrosVencidos } from "@/lib/domain/cobros";
 import { colorCliente } from "@/lib/domain/calendario";
-import { Client } from "@/lib/domain/types";
+import { Client, topePiezas } from "@/lib/domain/types";
 import { DisruptionSheet } from "@/components/disruption-sheet";
-import { SobroTiempoSheet } from "@/components/sobro-tiempo-sheet";
 import { Cargando, EmptyState } from "@/components/empty-state";
 import { Tilde } from "@/components/tilde";
 import { cn, indice } from "@/lib/utils";
 
-const fmtHoras = (h: number) => `${Math.round(h * 100) / 100}`.replace(".", ",");
+const fechaCorta = (iso: string) => format(fromISODate(iso), "EEE d MMM", { locale: es });
 
 function saludo(d: Date) {
   const h = d.getHours();
@@ -40,7 +31,6 @@ export default function HoyPage() {
   const today = useMemo(() => new Date(), []);
   const todayISO = toISODate(today);
   const [cambioAbierto, setCambioAbierto] = useState(false);
-  const [sobroAbierto, setSobroAbierto] = useState(false);
 
   const ctx = usePlan();
   const fijosHechos = useFijosHechos(todayISO);
@@ -77,8 +67,11 @@ export default function HoyPage() {
 
   const carga = plan.cargaPorDia[todayISO];
   const tareas = tareasDelDia(plan, todayISO);
+  const urgentes = tareas.filter((a) => esUrgente(a, todayISO));
+  const resto = tareas.filter((a) => !esUrgente(a, todayISO));
+  // A day's worth of upcoming work, in case today goes faster than planned.
+  const adelantar = sugerirAdelanto(plan, todayISO, topePiezas(estructura));
   const hitosHoy = plan.hitos.filter((h) => h.fecha === todayISO);
-  const nombreCliente = new Map(clients.map((c) => [c.id, c.nombre]));
   const fijos = estructura.fijosDiarios ?? [];
   const alertas = plan.alertas.filter((a) => a.tipo !== "dia-sobrecargado" || a.fecha === todayISO);
   const proximas = plan.asignaciones.filter((a) => a.fecha > todayISO);
@@ -88,7 +81,7 @@ export default function HoyPage() {
     carga?.bloqueo === "grabacion"
       ? "Hoy es día de grabación: el día entero queda bloqueado."
       : carga?.bloqueo === "viaje"
-        ? "Hoy es día de viaje: no hay horas de producción."
+        ? "Hoy es día de viaje: no hay lugar para producir."
         : carga?.bloqueo === "no-trabajo"
           ? "Hoy marcaste que no trabajás."
           : carga?.bloqueo === "libre-semana"
@@ -118,7 +111,7 @@ export default function HoyPage() {
       <div className="mb-6 flex flex-col gap-3 lg:mb-8 lg:flex-row">
         <div className="entra lg:flex-1" style={indice(1)}>
           <DiaReadout
-            horas={carga?.horas ?? 0}
+            carga={carga?.carga ?? 0}
             capacidad={carga?.capacidad ?? 0}
             semaforo={carga?.semaforo}
             tareas={tareas}
@@ -149,7 +142,7 @@ export default function HoyPage() {
       {hitosHoy.length > 0 && (
         <ul className="mb-6 flex flex-col gap-2">
           {hitosHoy.map((h, i) => {
-            const Icon = h.tipo === "grabacion" ? Video : PackageCheck;
+            const Icon = h.tipo === "grabacion" ? Video : h.tipo === "presentacion" ? Presentation : PackageCheck;
             return (
               <li
                 key={`${h.tipo}-${h.clienteId}-${i}`}
@@ -194,7 +187,6 @@ export default function HoyPage() {
                       {hecho && <Check size={14} strokeWidth={3} />}
                     </span>
                     <span className={hecho ? "line-through decoration-verde/50" : undefined}>{f.nombre}</span>
-                    <span className="numeros text-[0.8125rem] text-texto-secundario">{fmtHoras(f.horas)}h</span>
                   </button>
                 </li>
               );
@@ -248,30 +240,35 @@ export default function HoyPage() {
           title={hayDatos ? "Vas bien — nada para producir hoy" : "Todavía no hay clientes cargados"}
           detail={
             hayDatos
-              ? "No hay piezas pendientes para hoy. Si te sobra tiempo, la app te dice qué adelantar."
+              ? "No hay piezas pendientes para hoy. Si te sobra tiempo, abajo tenés qué adelantar."
               : "Agregá tu primer cliente para que la app arme el plan."
           }
         />
       ) : (
-        <section>
-          <h2 className="mb-2 flex items-baseline justify-between text-[0.8125rem] font-medium text-texto-secundario">
-            Para producir hoy
-            <span className="numeros">
-              {tareas.length} {tareas.length === 1 ? "tarea" : "tareas"}
-            </span>
-          </h2>
-          <ul className="papel flex flex-col divide-y divide-borde/80 overflow-hidden px-1.5 py-1">
-            {tareas.map((a, i) => (
-              <TareaFila
-                key={a.unidad.id}
-                asignacion={a}
-                cliente={nombreCliente.get(a.unidad.clienteId ?? "")}
-                color={colorCliente(clients, a.unidad.clienteId)}
-                orden={i + 3}
-              />
-            ))}
-          </ul>
-        </section>
+        <>
+          {urgentes.length > 0 && (
+            <BloqueTareas
+              titulo="Urgente"
+              detalle="Vence en 3 días o menos, está atrasado o destraba una grabación."
+              asignaciones={urgentes}
+              clients={clients}
+              orden={3}
+              urgente
+            />
+          )}
+          {resto.length > 0 && <BloqueTareas titulo="Hoy" asignaciones={resto} clients={clients} orden={4} />}
+        </>
+      )}
+
+      {adelantar.length > 0 && (
+        <BloqueTareas
+          titulo="Si me sobra tiempo"
+          detalle="Lo próximo del plan que ya podés adelantar."
+          asignaciones={adelantar}
+          clients={clients}
+          orden={5}
+          mostrarFecha
+        />
       )}
 
       {alertas.length > 0 && (
@@ -295,17 +292,7 @@ export default function HoyPage() {
         </section>
       )}
 
-      <div className="mt-7 flex flex-col gap-3 sm:flex-row">
-        <button
-          onClick={() => setSobroAbierto(true)}
-          className="boton-primario tocable group flex w-full items-center justify-center gap-2 rounded-[14px] px-5 py-3.5 text-center text-[0.9375rem] font-medium"
-        >
-          <Sparkles
-            size={16}
-            className="transition-transform duration-500 ease-[cubic-bezier(0.34,1.56,0.64,1)] group-hover:rotate-[20deg] group-hover:scale-125"
-          />
-          Me sobró tiempo
-        </button>
+      <div className="mt-7">
         <button
           onClick={() => setCambioAbierto(true)}
           className="tocable w-full rounded-[14px] border border-borde bg-bg-elevada/60 px-5 py-3.5 text-center text-[0.9375rem] font-medium text-texto hover:bg-bg-elevada"
@@ -323,36 +310,92 @@ export default function HoyPage() {
         tareasProximas={proximas.filter((a) => sePuedeTildar(a.unidad))}
         grabacionesPendientes={grabaciones.filter((g) => !g.hecha)}
       />
-      <SobroTiempoSheet
-        open={sobroAbierto}
-        onClose={() => setSobroAbierto(false)}
-        capacidadLibre={Math.max((carga?.capacidad ?? 0) - (carga?.horas ?? 0), 0)}
-        sugerir={(horas) => sugerirAdelanto(plan, todayISO, horas)}
-        nombreCliente={nombreCliente}
-      />
     </div>
   );
 }
 
-function TareaFila({
-  asignacion,
-  cliente,
-  color,
+/** One block of Hoy (Urgente / Hoy / Si me sobra tiempo): a one-line count per
+ * client ("Ana Pastelería: 2 posteos · Bruno: 1 posteo"), then a card per
+ * client with the pieces to tick. */
+function BloqueTareas({
+  titulo,
+  detalle,
+  asignaciones,
+  clients,
   orden,
+  urgente,
+  mostrarFecha,
 }: {
-  asignacion: Asignacion;
-  cliente?: string;
-  color: string;
+  titulo: string;
+  detalle?: string;
+  asignaciones: Asignacion[];
+  clients: Client[];
   orden: number;
+  urgente?: boolean;
+  mostrarFecha?: boolean;
 }) {
-  const { unidad, atrasada } = asignacion;
+  const grupos = agruparPorCliente(asignaciones, clients);
+  return (
+    <section className="entra mb-6" style={indice(orden)}>
+      <h2
+        className={cn(
+          "flex items-baseline justify-between text-[0.8125rem] font-medium",
+          urgente ? "text-terracota" : "text-texto-secundario",
+        )}
+      >
+        {titulo}
+        <span className="numeros">
+          {asignaciones.length} {asignaciones.length === 1 ? "tarea" : "tareas"}
+        </span>
+      </h2>
+      {detalle && <p className="text-[0.8125rem] text-texto-secundario">{detalle}</p>}
+      <p className="mb-2.5 mt-1 text-[0.9375rem]">
+        {grupos.map((g, i) => (
+          <span key={g.clienteId ?? "otras"}>
+            {i > 0 && <span className="text-texto-secundario"> · </span>}
+            <span className="font-semibold">{g.nombre}:</span> {g.resumen}
+          </span>
+        ))}
+      </p>
+      <ul className="flex flex-col gap-2">
+        {grupos.map((g) => (
+          <GrupoFila
+            key={g.clienteId ?? "otras"}
+            grupo={g}
+            color={colorCliente(clients, g.clienteId)}
+            mostrarFecha={mostrarFecha}
+          />
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+function GrupoFila({ grupo, color, mostrarFecha }: { grupo: GrupoCliente; color: string; mostrarFecha?: boolean }) {
+  return (
+    <li className="papel overflow-hidden">
+      <p className="flex items-center gap-2 border-b border-borde/80 px-4 py-2.5">
+        <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: color }} aria-hidden />
+        <span className="shrink-0 font-semibold">{grupo.nombre}</span>
+        <span className="truncate text-[0.9375rem] text-texto-secundario">{grupo.resumen}</span>
+      </p>
+      <ul className="flex flex-col divide-y divide-borde/80 px-1.5 py-0.5">
+        {grupo.asignaciones.map((a) => (
+          <TareaFila key={a.unidad.id} asignacion={a} mostrarFecha={mostrarFecha} />
+        ))}
+      </ul>
+    </li>
+  );
+}
+
+function TareaFila({ asignacion, mostrarFecha }: { asignacion: Asignacion; mostrarFecha?: boolean }) {
+  const { unidad, atrasada, enMargen } = asignacion;
   const tildable = sePuedeTildar(unidad);
   const [hecha, setHecha] = useState(false);
   return (
     <li
-      style={indice(orden)}
       className={cn(
-        "entra flex items-start gap-3 rounded-[12px] px-2.5 py-3.5 transition-colors",
+        "flex items-start gap-3 rounded-[12px] px-2.5 py-3 transition-colors",
         atrasada && !hecha && "bg-terracota/[0.06]",
         hecha && "fila-hecha",
       )}
@@ -368,48 +411,49 @@ function TareaFila({
         <FileText size={22} strokeWidth={1.75} className="mt-0.5 shrink-0 text-texto-secundario" />
       )}
       <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: color }} aria-hidden />
-          <p className="truncate font-semibold">{cliente ?? unidad.etiqueta}</p>
-          {atrasada && (
-            <span className="shrink-0 rounded-[8px] bg-terracota/15 px-1.5 py-0.5 text-[0.75rem] font-medium text-terracota">
-              atrasada
+        <p className={cn("text-[0.9375rem]", hecha && "line-through")}>{unidad.etiqueta}</p>
+        <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[0.8125rem] text-texto-secundario">
+          {unidad.limite && (
+            <span>
+              {unidad.tipo === "edicion" ? "entrega" : unidad.tipo === "guion" ? "antes de grabar, el" : "para el"}{" "}
+              {fechaCorta(unidad.limite)}
             </span>
           )}
-        </div>
-        <p className={cn("text-[0.9375rem] text-texto-secundario", hecha && "line-through")}>
-          {unidad.etiqueta}
-          {unidad.limite ? ` · para el ${unidad.limite}` : ""}
+          {mostrarFecha && <span>· planeada {fechaCorta(asignacion.fecha)}</span>}
+          {atrasada && (
+            <span className="rounded-[8px] bg-terracota/15 px-1.5 py-0.5 font-medium text-terracota">atrasada</span>
+          )}
+          {enMargen && <span className="rounded-[8px] bg-ambar/15 px-1.5 py-0.5 font-medium text-ambar">usa el margen</span>}
+          {unidad.provisoria && (
+            <span className="rounded-[8px] bg-borde/60 px-1.5 py-0.5 font-medium">provisoria: falta grabar</span>
+          )}
         </p>
       </div>
-      <p className="numeros shrink-0 rounded-[8px] bg-bg-hundida px-2 py-0.5 text-[0.8125rem] font-medium text-texto-secundario">
-        {fmtHoras(unidad.horas)}h
-      </p>
     </li>
   );
 }
 
-/** Today's hours as a strip of client-colored segments over the day's
- * capacity — you see whose work fills the day, not just a total. */
+/** Today's load as a strip of client-colored segments over the daily cap —
+ * you see whose work fills the day, not just a total. */
 function DiaReadout({
-  horas,
+  carga,
   capacidad,
   semaforo,
   tareas,
   clients,
 }: {
-  horas: number;
+  carga: number;
   capacidad: number;
   semaforo?: string;
   tareas: Asignacion[];
   clients: Client[];
 }) {
   const pasada = semaforo === "sobrecargado";
-  const total = Math.max(capacidad, horas, 0.0001);
+  const total = Math.max(capacidad, carga, 0.0001);
   const porCliente = new Map<string, number>();
   tareas.forEach((t) => {
     const k = t.unidad.clienteId ?? "";
-    porCliente.set(k, (porCliente.get(k) ?? 0) + t.unidad.horas);
+    porCliente.set(k, (porCliente.get(k) ?? 0) + t.unidad.peso);
   });
   const segmentos = [...porCliente.entries()];
 
@@ -417,15 +461,15 @@ function DiaReadout({
     <div className="papel h-full px-4 pb-4 pt-3.5">
       <div className="mb-3 flex items-start justify-between gap-3">
         <div>
-          <p className="text-[0.8125rem] text-texto-secundario">Horas de hoy</p>
+          <p className="text-[0.8125rem] text-texto-secundario">Piezas de hoy</p>
           <p className="numeros">
-            <span className="titulo-serif text-[1.75rem] font-medium leading-tight">{fmtHoras(horas)}</span>
-            <span className="text-[0.9375rem] text-texto-secundario"> h de {fmtHoras(capacidad)} h libres</span>
+            <span className="titulo-serif text-[1.75rem] font-medium leading-tight">{fmtPiezas(carga)}</span>
+            <span className="text-[0.9375rem] text-texto-secundario"> de {fmtPiezas(capacidad)} de tope</span>
           </p>
         </div>
         {pasada ? (
           <span className="pop mt-1 rounded-[8px] bg-ambar/15 px-2 py-1 text-[0.8125rem] font-medium text-ambar">
-            Se pasa de horas
+            Se pasa del tope
           </span>
         ) : capacidad > 0 ? (
           <span className="pop mt-1 flex items-center gap-1 rounded-[8px] bg-verde/12 px-2 py-1 text-[0.8125rem] font-medium text-verde">
@@ -436,18 +480,18 @@ function DiaReadout({
       <div
         className="flex h-2.5 gap-[3px] overflow-hidden rounded-full bg-bg-hundida"
         role="img"
-        aria-label={`${fmtHoras(horas)} de ${fmtHoras(capacidad)} horas ocupadas`}
+        aria-label={`${fmtPiezas(carga)} de ${fmtPiezas(capacidad)} piezas de tope`}
       >
-        {segmentos.map(([id, h], i) => (
+        {segmentos.map(([id, p], i) => (
           <span
             key={id || "suelta"}
             className="segmento h-full first:rounded-l-full last:rounded-r-full"
             style={{
               ...indice(i),
-              width: `${(h / total) * 100}%`,
+              width: `${(p / total) * 100}%`,
               background: colorCliente(clients, id || undefined),
             }}
-            title={`${clients.find((c) => c.id === id)?.nombre ?? "Otras"} · ${fmtHoras(h)} h`}
+            title={`${clients.find((c) => c.id === id)?.nombre ?? "Otras"} · ${fmtPiezas(p)}`}
           />
         ))}
       </div>

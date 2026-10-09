@@ -16,7 +16,7 @@ import { completarUnidad } from "@/lib/domain/completar";
 import { Client, Grabacion } from "@/lib/domain/types";
 import { BotonPrimario, OpcionSheet, Sheet } from "@/components/sheet";
 
-type Paso = "menu" | "no-llegue" | "adelante" | "cliente-frenado" | "grabacion" | "no-trabajo" | "horas";
+type Paso = "menu" | "no-llegue" | "adelante" | "cliente-frenado" | "grabacion" | "no-trabajo" | "tope";
 
 const campo = "input";
 const etiquetaCampo = "text-[0.8125rem] font-medium text-texto-secundario";
@@ -43,7 +43,7 @@ export function DisruptionSheet({
   const [paso, setPaso] = useState<Paso>("menu");
   const [seleccion, setSeleccion] = useState("");
   const [fecha, setFecha] = useState(today);
-  const [horas, setHoras] = useState(4);
+  const [piezas, setPiezas] = useState(3);
   const [confirmado, setConfirmado] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -68,7 +68,7 @@ export function DisruptionSheet({
   const manana = toISODate(addDays(fromISODate(today), 1));
   const nombreCliente = new Map(clients.map((c) => [c.id, c.nombre]));
   const etiqueta = (a: Asignacion) =>
-    `${nombreCliente.get(a.unidad.clienteId ?? "") ?? ""} · ${a.unidad.etiqueta} (${a.unidad.horas} h)`;
+    `${nombreCliente.get(a.unidad.clienteId ?? "") ?? ""} · ${a.unidad.etiqueta}`;
   const movibles = tareasHoy.filter((t) => t.unidad.piezaId);
 
   return (
@@ -90,7 +90,7 @@ export function DisruptionSheet({
           <OpcionSheet onClick={() => setPaso("adelante")}>Adelanté algo</OpcionSheet>
           <OpcionSheet onClick={() => setPaso("cliente-frenado")}>Un cliente está frenado</OpcionSheet>
           <OpcionSheet onClick={() => setPaso("grabacion")}>Se corrió una grabación</OpcionSheet>
-          <OpcionSheet onClick={() => setPaso("horas")}>Hoy tengo menos horas</OpcionSheet>
+          <OpcionSheet onClick={() => setPaso("tope")}>Hoy puedo hacer menos piezas</OpcionSheet>
           <OpcionSheet onClick={() => setPaso("no-trabajo")}>Hoy no trabajo</OpcionSheet>
         </div>
       ) : paso === "no-llegue" ? (
@@ -217,28 +217,28 @@ export function DisruptionSheet({
             </>
           )}
         </div>
-      ) : paso === "horas" ? (
+      ) : paso === "tope" ? (
         <div className="flex flex-col gap-3">
           <label className="flex flex-col gap-1">
-            <span className={etiquetaCampo}>Horas de trabajo hoy</span>
+            <span className={etiquetaCampo}>Piezas que puedo hacer hoy</span>
             <input
               type="number"
               min={0}
-              max={12}
+              max={30}
               step={0.5}
-              value={horas}
-              onChange={(e) => setHoras(Number(e.target.value))}
+              value={piezas}
+              onChange={(e) => setPiezas(Number(e.target.value))}
               className={campo}
             />
           </label>
-          <BotonPrimario onClick={() => ejecutar(() => guardarHorasDia(today, horas), "Actualizado: hoy vas a ver menos tareas.")}>
+          <BotonPrimario onClick={() => ejecutar(() => guardarHorasDia(today, piezas), "Actualizado: hoy vas a ver menos piezas y el resto se reparte.")}>
             Confirmar
           </BotonPrimario>
         </div>
       ) : (
         <div>
           <p className="text-[0.9375rem] text-texto-secundario">
-            Hoy queda sin horas y lo pendiente se reparte en los próximos días.
+            Hoy queda sin lugar y lo pendiente se reparte en los próximos días.
           </p>
           <BotonPrimario
             onClick={() =>

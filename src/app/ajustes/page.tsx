@@ -4,7 +4,16 @@ import { useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, X } from "lucide-react";
 import { guardarEstructuraSemanal, useEstructuraSemanal } from "@/lib/supabase/data";
-import { DEFAULT_ESTRUCTURA_SEMANAL, DEFAULT_TIEMPOS_PIEZA, EstructuraSemanal, FijoDiario, PieceType, TiemposPieza } from "@/lib/domain/types";
+import {
+  DEFAULT_ESTRUCTURA_SEMANAL,
+  EstructuraSemanal,
+  FijoDiario,
+  PieceType,
+  diasDeTrabajo,
+  pesosPieza,
+  topePiezas,
+} from "@/lib/domain/types";
+import { TIPO_PIEZA_LABEL } from "@/lib/domain/labels";
 
 const DIAS: { valor: number; label: string }[] = [
   { valor: 1, label: "Lunes" },
@@ -16,6 +25,8 @@ const DIAS: { valor: number; label: string }[] = [
   { valor: 0, label: "Domingo" },
 ];
 
+const casilla = "h-[16px] w-[16px] accent-[var(--color-terracota)]";
+
 export default function AjustesPage() {
   const estructuraGuardada = useEstructuraSemanal();
   // `null` = no local edits yet, so the form mirrors whatever loads from
@@ -24,38 +35,43 @@ export default function AjustesPage() {
   const [saving, setSaving] = useState(false);
   const [guardado, setGuardado] = useState(false);
   const estructura = editada ?? estructuraGuardada ?? DEFAULT_ESTRUCTURA_SEMANAL;
+  const trabajo = diasDeTrabajo(estructura);
+  const pesos = pesosPieza(estructura);
 
-  function setHoras(dia: number, horas: number) {
-    setEditada({ ...estructura, horasPorDia: { ...estructura.horasPorDia, [dia]: horas } });
+  function editar(next: EstructuraSemanal) {
+    setEditada(next);
     setGuardado(false);
+  }
+
+  function toggleTrabajo(dia: number) {
+    editar({
+      ...estructura,
+      diasTrabajo: trabajo.includes(dia) ? trabajo.filter((d) => d !== dia) : [...trabajo, dia],
+    });
   }
 
   function toggleGrabacion(dia: number) {
     const tiene = estructura.diasGrabacionHabituales.includes(dia);
-    setEditada({
+    editar({
       ...estructura,
       diasGrabacionHabituales: tiene
         ? estructura.diasGrabacionHabituales.filter((d) => d !== dia)
         : [...estructura.diasGrabacionHabituales, dia],
     });
-    setGuardado(false);
   }
 
   const fijos = estructura.fijosDiarios ?? [];
-  const tiempos: TiemposPieza = estructura.tiemposPieza ?? DEFAULT_TIEMPOS_PIEZA;
 
-  function setTiempo(tipo: PieceType, campo: "edicion" | "guion", horas: number) {
-    setEditada({ ...estructura, tiemposPieza: { ...tiempos, [tipo]: { ...tiempos[tipo], [campo]: horas } } });
-    setGuardado(false);
+  function setPeso(tipo: PieceType, valor: number) {
+    editar({ ...estructura, pesoPieza: { ...pesos, [tipo]: valor } });
   }
 
   function setFijos(next: FijoDiario[]) {
-    setEditada({ ...estructura, fijosDiarios: next });
-    setGuardado(false);
+    editar({ ...estructura, fijosDiarios: next });
   }
 
   function agregarFijo() {
-    setFijos([...fijos, { id: crypto.randomUUID(), nombre: "", horas: 0.5 }]);
+    setFijos([...fijos, { id: crypto.randomUUID(), nombre: "", horas: 0 }]);
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -64,6 +80,9 @@ export default function AjustesPage() {
     try {
       await guardarEstructuraSemanal({
         ...estructura,
+        diasTrabajo: trabajo,
+        topePiezasDia: topePiezas(estructura),
+        pesoPieza: pesos,
         fijosDiarios: (estructura.fijosDiarios ?? []).filter((f) => f.nombre.trim()),
       });
       setGuardado(true);
@@ -83,32 +102,68 @@ export default function AjustesPage() {
 
       <form onSubmit={handleSubmit} className="entra flex flex-col gap-8 pb-10">
         <section>
+          <h2 className="mb-1 text-[0.9375rem] font-semibold">Cuánto hacés por día</h2>
+          <p className="mb-3 text-[0.8125rem] text-texto-secundario">
+            El plan cuenta piezas, no horas. Cada día de trabajo entra hasta este tope, y cada entrega se reparte
+            parejo entre los días que tiene antes de su fecha.
+          </p>
+          <label className="papel flex items-center gap-3 px-3.5 py-3">
+            <span className="flex-1 text-[0.9375rem] font-medium">Tope de piezas por día</span>
+            <input
+              type="number"
+              min={1}
+              max={50}
+              step={0.5}
+              value={topePiezas(estructura)}
+              onChange={(ev) => editar({ ...estructura, topePiezasDia: Math.max(Number(ev.target.value), 0.5) })}
+              className="input w-20"
+            />
+          </label>
+        </section>
+
+        <section>
+          <h2 className="mb-1 text-[0.9375rem] font-semibold">Cuánto pesa cada pieza</h2>
+          <p className="mb-3 text-[0.8125rem] text-texto-secundario">
+            En historias: si un reel te lleva lo mismo que 2 historias, poné 2 en reel y 1 en historia.
+          </p>
+          <ul className="papel flex flex-col divide-y divide-borde/80 px-1.5">
+            {(["historia", "posteo", "reel"] as PieceType[]).map((tipo) => (
+              <li key={tipo} className="flex items-center gap-3 px-2 py-3">
+                <span className="flex-1 text-[0.9375rem] font-medium capitalize">{TIPO_PIEZA_LABEL[tipo].uno}</span>
+                <input
+                  type="number"
+                  min={0.5}
+                  max={10}
+                  step={0.5}
+                  value={pesos[tipo]}
+                  onChange={(ev) => setPeso(tipo, Math.max(Number(ev.target.value), 0.5))}
+                  className="input w-20"
+                  aria-label={`Peso de ${TIPO_PIEZA_LABEL[tipo].uno}`}
+                />
+              </li>
+            ))}
+          </ul>
+        </section>
+
+        <section>
           <h2 className="mb-1 text-[0.9375rem] font-semibold">Tu semana</h2>
           <p className="mb-3 text-[0.8125rem] text-texto-secundario">
-            Cuántas horas trabajás cada día y cuáles son tus días de grabación habituales. A esto se le
-            restan los fijos de todos los días para saber cuántas horas libres quedan para producir.
+            Qué días trabajás y cuáles son tus días de grabación habituales. Los días que no trabajás no reciben piezas.
           </p>
           <ul className="papel flex flex-col divide-y divide-borde/80 px-1.5">
             {DIAS.map(({ valor, label }) => (
               <li key={valor} className="flex items-center gap-3 px-2 py-3">
                 <span className="w-24 shrink-0 text-[0.9375rem] font-medium">{label}</span>
-                <input
-                  type="number"
-                  min={0}
-                  max={24}
-                  step={0.5}
-                  value={estructura.horasPorDia[valor] ?? 0}
-                  onChange={(ev) => setHoras(valor, Number(ev.target.value))}
-                  className="input w-20"
-                  aria-label={`Horas disponibles el ${label}`}
-                />
-                <span className="text-[0.8125rem] text-texto-secundario">h</span>
+                <label className="flex items-center gap-2 text-[0.8125rem] text-texto-secundario">
+                  <input type="checkbox" checked={trabajo.includes(valor)} onChange={() => toggleTrabajo(valor)} className={casilla} />
+                  Trabajo
+                </label>
                 <label className="ml-auto flex items-center gap-2 text-[0.8125rem] text-texto-secundario">
                   <input
                     type="checkbox"
                     checked={estructura.diasGrabacionHabituales.includes(valor)}
                     onChange={() => toggleGrabacion(valor)}
-                    className="h-[16px] w-[16px] accent-[var(--color-terracota)]"
+                    className={casilla}
                   />
                   Grabación
                 </label>
@@ -118,49 +173,9 @@ export default function AjustesPage() {
         </section>
 
         <section>
-          <h2 className="mb-1 text-[0.9375rem] font-semibold">Tiempos por tipo de pieza</h2>
-          <p className="mb-3 text-[0.8125rem] text-texto-secundario">
-            Cuánto tardás en cada una. Son el punto de partida: a medida que cargás horas reales en las piezas, la
-            app ajusta sola el tiempo de edición.
-          </p>
-          <ul className="papel flex flex-col divide-y divide-borde/80 px-1.5">
-            {(["historia", "posteo", "reel"] as PieceType[]).map((tipo) => (
-              <li key={tipo} className="flex flex-wrap items-center gap-3 px-2 py-3">
-                <span className="w-20 shrink-0 text-[0.9375rem] font-medium capitalize">{tipo}</span>
-                <label className="flex items-center gap-2 text-[0.8125rem] text-texto-secundario">
-                  Edición
-                  <input
-                    type="number"
-                    min={0.05}
-                    step={0.05}
-                    value={tiempos[tipo].edicion}
-                    onChange={(ev) => setTiempo(tipo, "edicion", Number(ev.target.value))}
-                    className="input w-20"
-                  />
-                  h
-                </label>
-                <label className="flex items-center gap-2 text-[0.8125rem] text-texto-secundario">
-                  Guion
-                  <input
-                    type="number"
-                    min={0.05}
-                    step={0.05}
-                    value={tiempos[tipo].guion}
-                    onChange={(ev) => setTiempo(tipo, "guion", Number(ev.target.value))}
-                    className="input w-20"
-                  />
-                  h
-                </label>
-              </li>
-            ))}
-          </ul>
-        </section>
-
-        <section>
           <h2 className="mb-1 text-[0.9375rem] font-semibold">Fijos de todos los días</h2>
           <p className="mb-3 text-[0.8125rem] text-texto-secundario">
-            Lo que hacés cada día sin falta (revisar cuentas, responder mensajes). Se tildan en Hoy, descuentan
-            horas de cada día laboral y nunca se mueven.
+            Lo que hacés cada día sin falta (revisar cuentas, responder mensajes). Se tildan en Hoy y nunca se mueven.
           </p>
           {fijos.length > 0 && (
             <ul className="mb-3 papel flex flex-col divide-y divide-borde/80 px-1.5">
@@ -174,17 +189,6 @@ export default function AjustesPage() {
                     className="input min-w-0 flex-1"
                     aria-label="Nombre del fijo"
                   />
-                  <input
-                    type="number"
-                    min={0}
-                    max={8}
-                    step={0.25}
-                    value={f.horas}
-                    onChange={(ev) => setFijos(fijos.map((x) => (x.id === f.id ? { ...x, horas: Number(ev.target.value) } : x)))}
-                    className="input w-20"
-                    aria-label={`Horas de ${f.nombre || "fijo"}`}
-                  />
-                  <span className="text-[0.8125rem] text-texto-secundario">h</span>
                   <button
                     type="button"
                     onClick={() => setFijos(fijos.filter((x) => x.id !== f.id))}

@@ -5,14 +5,14 @@
 
 import { useMemo } from "react";
 import { unidadesAdsFondo } from "@/lib/domain/ads";
-import { Plan, ajustarTiempos, planificar } from "@/lib/domain/planner";
+import { Entrega, calcularEntregas } from "@/lib/domain/entregas";
+import { Plan, planificar } from "@/lib/domain/planner";
 import { toISODate } from "@/lib/domain/dates";
 import { unidadesDeTareas } from "@/lib/domain/tareas";
 import {
   Client,
   Cobro,
   DEFAULT_ESTRUCTURA_SEMANAL,
-  DEFAULT_TIEMPOS_PIEZA,
   EstructuraSemanal,
   AdsReporte,
   Grabacion,
@@ -35,6 +35,8 @@ export interface PlanContext {
   today: Date;
   todayISO: string;
   plan: Plan;
+  /** Deliveries with progress and traffic light, earliest first. */
+  entregas: Entrega[];
   clients: Client[];
   piezas: Pieza[];
   grabaciones: Grabacion[];
@@ -71,8 +73,6 @@ export function usePlan(horizonteDias?: number): PlanContext | null {
       grabaciones,
       blockedDates,
       estructura,
-      // Editing times start from Ajustes and drift toward the real hours logged on pieces.
-      tiempos: ajustarTiempos(piezas, estructura.tiemposPieza ?? DEFAULT_TIEMPOS_PIEZA),
       extras: [...unidadesAdsFondo(clients, today), ...unidadesDeTareas(lista, clients, today)],
       overrides: dayOverrideHoras != null ? { [todayISO]: dayOverrideHoras } : undefined,
       horizonteDias,
@@ -81,6 +81,7 @@ export function usePlan(horizonteDias?: number): PlanContext | null {
       today,
       todayISO,
       plan,
+      entregas: calcularEntregas({ clients, piezas, grabaciones, plan, today }),
       clients,
       piezas,
       grabaciones,

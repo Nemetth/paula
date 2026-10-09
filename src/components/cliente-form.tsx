@@ -1,10 +1,20 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { Client, CicloTipo, ClienteEstado, ClienteTipo, FlujoConfig, Servicio, VolumenMensual } from "@/lib/domain/types";
+import { useState } from "react";
+import {
+  Client,
+  ClienteEstado,
+  ClienteTipo,
+  DEFAULT_MARGEN_DIAS,
+  FlujoConfig,
+  InicioDesde,
+  Servicio,
+  VolumenMensual,
+  inicioPorDefecto,
+} from "@/lib/domain/types";
 import { ESTADO_CLIENTE_LABEL, TIPO_CLIENTE_LABEL } from "@/lib/domain/labels";
 import { DEFAULT_FLUJO } from "@/lib/supabase/data";
-import { simularCarga } from "@/lib/domain/schedule-engine";
+import { EstimacionCarga } from "@/components/estimacion-carga";
 
 export interface ClienteFormValues {
   nombre: string;
@@ -22,12 +32,10 @@ export interface ClienteFormValues {
   notas: string;
 }
 
-const CICLO_LABEL: Record<CicloTipo, string> = {
-  mensual: "Mensual",
-  semanal: "Semanal",
-  diario: "Diario",
-  "solo-ads": "Solo Ads (sin contenido)",
-  personalizado: "Personalizado",
+const INICIO_LABEL: Record<InicioDesde, string> = {
+  aprobacion: "Cuando aprueba el calendario",
+  grabacion: "Después de la grabación",
+  fecha: "Desde una fecha fija",
 };
 
 function valuesFromClient(c?: Client): ClienteFormValues {
@@ -66,6 +74,7 @@ function valuesFromClient(c?: Client): ClienteFormValues {
 }
 
 export function clienteFormValuesToInput(v: ClienteFormValues) {
+  const inicioDesde = inicioPorDefecto(v.flujo, v.tipo);
   return {
     nombre: v.nombre.trim(),
     rubro: v.rubro.trim() || undefined,
@@ -74,7 +83,12 @@ export function clienteFormValuesToInput(v: ClienteFormValues) {
     estado: v.estado,
     intocable: v.intocable,
     volumenMensual: v.volumenMensual,
-    flujo: v.flujo,
+    flujo: {
+      ...v.flujo,
+      inicioDesde,
+      inicioFecha: inicioDesde === "fecha" ? v.flujo.inicioFecha : undefined,
+      tieneGrabacion: inicioDesde === "grabacion",
+    },
     contactoWhatsapp: v.contactoWhatsapp.trim() || undefined,
     ventanaCobro: [v.ventanaCobroInicio, v.ventanaCobroFin] as [number, number],
     montoMensual: v.montoMensual ? Number(v.montoMensual) : undefined,
@@ -82,7 +96,7 @@ export function clienteFormValuesToInput(v: ClienteFormValues) {
   };
 }
 
-type FormErrors = Partial<Record<"nombre" | "contactoWhatsapp" | "ventanaCobroFin", string>>;
+type FormErrors = Partial<Record<"nombre" | "contactoWhatsapp" | "ventanaCobroFin" | "inicioFecha", string>>;
 
 function validate(v: ClienteFormValues): FormErrors {
   const errors: FormErrors = {};
@@ -91,6 +105,9 @@ function validate(v: ClienteFormValues): FormErrors {
   const esLink = /^https?:\/\//i.test(wa);
   if (wa && !esLink && wa.replace(/\D/g, "").length < 8) {
     errors.contactoWhatsapp = "Ingresá un número con código de área o un link de grupo.";
+  }
+  if (inicioPorDefecto(v.flujo, v.tipo) === "fecha" && !v.flujo.inicioFecha) {
+    errors.inicioFecha = "Elegí desde qué fecha se puede empezar.";
   }
   if (v.ventanaCobroInicio > v.ventanaCobroFin) {
     errors.ventanaCobroFin = "Tiene que ser igual o posterior al día de inicio.";
@@ -120,11 +137,6 @@ export function ClienteForm({
   const [errors, setErrors] = useState<FormErrors>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
 
-  const estimacion = useMemo(
-    () => simularCarga({ volumenMensual: values.volumenMensual, diasProduccion: values.flujo.diasProduccion }),
-    [values.volumenMensual, values.flujo.diasProduccion],
-  );
-
   function set<K extends keyof ClienteFormValues>(key: K, value: ClienteFormValues[K]) {
     setValues((v) => ({ ...v, [key]: value }));
     if (key in errors) setErrors((e) => ({ ...e, [key]: undefined }));
@@ -132,7 +144,10 @@ export function ClienteForm({
 
   function setFlujo<K extends keyof FlujoConfig>(key: K, value: FlujoConfig[K]) {
     setValues((v) => ({ ...v, flujo: { ...v.flujo, [key]: value } }));
+    if (key === "inicioFecha") setErrors((e) => ({ ...e, inicioFecha: undefined }));
   }
+
+  const inicio = inicioPorDefecto(values.flujo, values.tipo);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -157,17 +172,7 @@ export function ClienteForm({
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-6 pb-10">
-      <div className="rounded-[16px] bg-bg-hundida px-4 py-3.5">
-        <p className="text-[0.8125rem] font-medium text-texto-secundario">Estimación de carga</p>
-        <p className="font-semibold">
-          {estimacion.horasTotales}h totales <span className="font-normal text-texto-secundario">· ~{estimacion.horasPorSemana}h/semana</span>
-        </p>
-        <p className="mt-0.5 text-[0.8125rem] text-texto-secundario">
-          {estimacion.horasPorSemana > 40
-            ? "Esto solo, ya supera tu tope semanal de 40h."
-            : "Con tu cartera actual, revisá si entra en la semana antes de aceptar."}
-        </p>
-      </div>
+      {values.servicio !== "ads" && <EstimacionCarga volumen={values.volumenMensual} excluirId={initial?.id} />}
 
       <Section title="Datos básicos">
         <Field label="Nombre" error={errors.nombre}>
@@ -269,124 +274,51 @@ export function ClienteForm({
         </Section>
       )}
 
-      <Section title="Flujo de trabajo">
-        <Field label="Tipo de ciclo">
-          <select
-            value={values.flujo.cicloTipo}
-            onChange={(e) => setFlujo("cicloTipo", e.target.value as CicloTipo)}
-            className="input"
-          >
-            {Object.entries(CICLO_LABEL).map(([k, label]) => (
-              <option key={k} value={k}>
-                {label}
-              </option>
-            ))}
-          </select>
-        </Field>
-
-        {values.flujo.cicloTipo === "personalizado" && (
-          <Field label="Duración de cada período (días)">
+      {values.servicio !== "ads" && (
+        <Section title="Inicio y margen">
+          <Field label="Desde cuándo se pueden empezar las piezas">
+            <select
+              value={inicio}
+              onChange={(e) => setFlujo("inicioDesde", e.target.value as InicioDesde)}
+              className="input"
+            >
+              {(Object.keys(INICIO_LABEL) as InicioDesde[]).map((k) => (
+                <option key={k} value={k}>
+                  {INICIO_LABEL[k]}
+                </option>
+              ))}
+            </select>
+          </Field>
+          {inicio === "fecha" && (
+            <Field label="Fecha de inicio" error={errors.inicioFecha}>
+              <input
+                id="field-inicioFecha"
+                type="date"
+                aria-invalid={!!errors.inicioFecha}
+                value={values.flujo.inicioFecha ?? ""}
+                onChange={(e) => setFlujo("inicioFecha", e.target.value || undefined)}
+                className="input"
+              />
+            </Field>
+          )}
+          <Field label="Días de margen: terminar antes de la entrega">
             <input
               type="number"
-              min={1}
-              value={values.flujo.duracionPeriodoDias ?? 30}
-              onChange={(e) => setFlujo("duracionPeriodoDias", Number(e.target.value))}
+              min={0}
+              max={30}
+              value={values.flujo.margenDias ?? DEFAULT_MARGEN_DIAS}
+              onChange={(e) => setFlujo("margenDias", Math.max(Number(e.target.value), 0))}
               className="input"
             />
           </Field>
-        )}
-
-        {values.flujo.cicloTipo !== "solo-ads" && (
-          <>
-            <Checkbox
-              label="Manda calendario de ideas para aprobar"
-              checked={values.flujo.mandaCalendario}
-              onChange={(v) => setFlujo("mandaCalendario", v)}
-            />
-            {values.flujo.mandaCalendario && (
-              <Field label="Días que tarda en aprobar el calendario">
-                <input
-                  type="number"
-                  min={0}
-                  value={values.flujo.diasAprobacion}
-                  onChange={(e) => setFlujo("diasAprobacion", Number(e.target.value))}
-                  className="input"
-                />
-              </Field>
-            )}
-
-            <Checkbox
-              label="Hay grabación"
-              checked={values.flujo.tieneGrabacion}
-              onChange={(v) => setFlujo("tieneGrabacion", v)}
-            />
-            {values.flujo.tieneGrabacion && (
-              <>
-                <Field label="Días de viaje extra para grabar (si es fuera de la ciudad)">
-                  <input
-                    type="number"
-                    min={0}
-                    value={values.flujo.diasViajeGrabacion}
-                    onChange={(e) => setFlujo("diasViajeGrabacion", Number(e.target.value))}
-                    className="input"
-                  />
-                </Field>
-                <Field label="Reels entregados X días después de grabar (dejar vacío si no aplica)">
-                  <input
-                    type="number"
-                    min={0}
-                    value={values.flujo.diasEntregaPostGrabacion ?? ""}
-                    onChange={(e) =>
-                      setFlujo(
-                        "diasEntregaPostGrabacion",
-                        e.target.value === "" ? undefined : Number(e.target.value),
-                      )
-                    }
-                    className="input"
-                  />
-                </Field>
-              </>
-            )}
-
-            <Field label="Días hábiles para producir las piezas">
-              <input
-                type="number"
-                min={1}
-                value={values.flujo.diasProduccion}
-                onChange={(e) => setFlujo("diasProduccion", Number(e.target.value))}
-                className="input"
-              />
-            </Field>
-            <Field label="Días que tarda en corregir">
-              <input
-                type="number"
-                min={0}
-                value={values.flujo.diasCorreccion}
-                onChange={(e) => setFlujo("diasCorreccion", Number(e.target.value))}
-                className="input"
-              />
-            </Field>
-            <Field label="Días para hacer ajustes después de la corrección">
-              <input
-                type="number"
-                min={0}
-                value={values.flujo.diasAjustes}
-                onChange={(e) => setFlujo("diasAjustes", Number(e.target.value))}
-                className="input"
-              />
-            </Field>
-            <Field label="Margen de cierre antes de que empiece el período (días hábiles)">
-              <input
-                type="number"
-                min={0}
-                value={values.flujo.diasMargenCierre}
-                onChange={(e) => setFlujo("diasMargenCierre", Number(e.target.value))}
-                className="input"
-              />
-            </Field>
-          </>
-        )}
-      </Section>
+          <p className="text-[0.8125rem] text-texto-secundario">
+            {inicio === "grabacion"
+              ? "Las piezas se reparten en los días después de cada grabación, aunque todavía no esté hecha, "
+              : "Las piezas se reparten desde que se pueden empezar "}
+            hasta la entrega menos el margen.
+          </p>
+        </Section>
+      )}
 
       <Section title="Plata">
         <div className="grid grid-cols-2 gap-3">
@@ -469,28 +401,6 @@ function Field({ label, error, children }: { label: string; error?: string; chil
       <span className="text-[0.8125rem] font-medium text-texto-secundario">{label}</span>
       {children}
       {error && <span className="text-[0.8125rem] text-[var(--color-error)]">{error}</span>}
-    </label>
-  );
-}
-
-function Checkbox({
-  label,
-  checked,
-  onChange,
-}: {
-  label: string;
-  checked: boolean;
-  onChange: (v: boolean) => void;
-}) {
-  return (
-    <label className="flex items-center gap-2.5 py-1">
-      <input
-        type="checkbox"
-        checked={checked}
-        onChange={(e) => onChange(e.target.checked)}
-        className="h-[18px] w-[18px] accent-[var(--color-terracota)]"
-      />
-      <span className="text-[0.9375rem]">{label}</span>
     </label>
   );
 }

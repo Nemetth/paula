@@ -24,6 +24,8 @@ import {
   SeccionReunion,
 } from "@/components/ficha/otras";
 import { toISODate } from "@/lib/domain/dates";
+import { usePlan } from "@/lib/supabase/use-plan";
+import { EntregaActual } from "@/components/ficha/entrega-actual";
 import { ESTADO_CLIENTE_LABEL, TIPO_CLIENTE_LABEL } from "@/lib/domain/labels";
 import { ClienteEstado } from "@/lib/domain/types";
 import { Cargando } from "@/components/empty-state";
@@ -40,6 +42,7 @@ export default function ClienteDetailPage() {
   const ideas = useIdeas();
   const chequeos = useAdsChequeos();
   const cobros = useCobros();
+  const ctx = usePlan();
   const cliente = clients?.find((c) => c.id === id);
 
   if (clients === undefined) return <Cargando />;
@@ -143,6 +146,7 @@ export default function ClienteDetailPage() {
 
         {cliente.servicio !== "ads" && (
           <>
+            {ctx && <EntregaActual cliente={cliente} entregas={ctx.entregas.filter((e) => e.clienteId === cliente.id)} />}
             <SeccionCiclo
               piezas={piezas}
               grabaciones={grabaciones}

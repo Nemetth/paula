@@ -1,9 +1,13 @@
-// Piece-based planner. Replaces the per-client, stage-window thinking of
-// schedule-engine.ts with one global pass over EVERYTHING Paula has to do:
+// Piece-based planner. One global pass over EVERYTHING Paula has to do:
 //
 // - the unit of work is a piece (or a loose task), not a client stage;
-// - capacity is a single per-day budget shared by all clients, so two clients
-//   can no longer both "produce" on the same hours;
+// - capacity is counted in pieces, not hours: a daily cap Paula sets, with a
+//   weight per piece type (a reel can count as 2 historias);
+// - each delivery is spread evenly over the days between when it can start and
+//   its target date (delivery minus the client's margin), so a delivery is
+//   never piled onto the first free day, and clients mix within a day;
+// - pieces that wait on a recording are planned provisionally on the days after
+//   it, so the plan shows them before they are shot;
 // - recordings block their whole day (plus travel days) and their pieces are
 //   due 7 days later, so moving a recording moves the delivery by derivation;
 // - nothing is stored as a plan. Ticking a piece's estado (or logging a day
@@ -15,14 +19,17 @@ import { addDays, endOfMonth, format, startOfDay, startOfMonth } from "date-fns"
 import { fromISODate, toISODate } from "./dates";
 import {
   Client,
-  DEFAULT_TIEMPOS_PIEZA,
   DiaBloqueado,
   ENTREGA_DIAS_POST_GRABACION,
   EstructuraSemanal,
   Grabacion,
   PieceType,
   Pieza,
-  TiemposPieza,
+  diasDeTrabajo,
+  inicioDe,
+  margenDe,
+  pesosPieza,
+  topePiezas,
 } from "./types";
 
 // ---------- public types ----------
@@ -43,14 +50,22 @@ export interface UnidadTrabajo {
   categoria: Categoria;
   clienteId?: string;
   piezaId?: string;
+  piezaTipo?: PieceType;
   /** Loose task this unit was built from. */
   tareaId?: string;
   etiqueta: string;
-  horas: number;
+  /** How much of the daily cap it takes, in pieces. */
+  peso: number;
   /** Earliest day it can be worked (ISO). Defaults to today. */
   desde?: string;
-  /** Hard-ish deadline (ISO). Undefined = no deadline, filled last. */
+  /** Soft target: the day it should be done by (delivery minus margin). */
+  objetivo?: string;
+  /** Hard deadline: the delivery (ISO). Undefined = no deadline, filled last. */
   limite?: string;
+  /** Spread evenly with the rest of its delivery instead of taking the first free day. */
+  repartir: boolean;
+  /** Waits on a recording that hasn't happened yet: planned, but provisional. */
+  provisoria?: boolean;
   intocable: boolean;
 }
 
@@ -59,13 +74,17 @@ export interface Asignacion {
   fecha: string;
   /** Placed after its deadline, or the deadline had already passed. */
   atrasada: boolean;
+  /** Placed after its target date but still before the delivery. */
+  enMargen: boolean;
 }
 
 export type SemaforoCarga = "libre" | "justo" | "sobrecargado" | "sin-capacidad";
 
 export interface CargaDia {
   fecha: string;
-  horas: number;
+  /** Planned load, in pieces. */
+  carga: number;
+  /** Daily cap, in pieces. */
   capacidad: number;
   semaforo: SemaforoCarga;
   /** Why capacity is 0, when it is (grabación, viaje, no trabajo). */
@@ -74,7 +93,7 @@ export interface CargaDia {
 
 export interface Hito {
   fecha: string;
-  tipo: "grabacion" | "entrega";
+  tipo: "grabacion" | "entrega" | "presentacion";
   clienteId: string;
   detalle: string;
 }
@@ -110,9 +129,8 @@ export interface PlannerInput {
   grabaciones: Grabacion[];
   blockedDates: DiaBloqueado[];
   estructura: EstructuraSemanal;
-  /** Explicit available hours for a date (the "hoy trabajo menos" override). */
+  /** Explicit cap in pieces for a date (the "hoy puedo menos" override). */
   overrides?: Record<string, number>;
-  tiempos?: TiemposPieza;
   /** Extra units from other modules (Ads reviews, loose tasks, ...). */
   extras?: UnidadTrabajo[];
   /** How many days ahead to plan. */
@@ -123,8 +141,10 @@ export interface PlannerInput {
 
 const HORIZONTE_DEFAULT = 60;
 const EPS = 1e-9;
-/** Hours reserved to build the next month's idea calendar. */
-const HORAS_CALENDARIO = 2;
+/** Weight of preparing one piece's script before a recording. */
+const PESO_GUION = 0.5;
+/** Weight of building the next month's idea calendar. */
+const PESO_CALENDARIO = 2;
 /** The new calendar should start in the 2nd week of the publication period. */
 const DIA_INICIO_CALENDARIO = 7;
 /** Days before the next period the calendar must be done by (approval + recording margin). */
@@ -142,6 +162,11 @@ export function fechaEntregaDe(pieza: Pieza, grabaciones: Grabacion[]): string |
   return toISODate(addDays(fromISODate(grab.fecha), ENTREGA_DIAS_POST_GRABACION));
 }
 
+/** Target date: the delivery minus the client's margin. */
+export function objetivoDe(entregaISO: string, client: Client): string {
+  return toISODate(addDays(fromISODate(entregaISO), -margenDe(client)));
+}
+
 /** Last day with a piece scheduled to publish. */
 export function publicadoHasta(clienteId: string, piezas: Pieza[]): string | undefined {
   return piezas
@@ -155,77 +180,81 @@ function nextPeriod(today: Date): string {
   return format(addDays(endOfMonth(today), 1), "yyyy-MM");
 }
 
-// ---------- unit generation ----------
+const maxISO = (...fechas: (string | undefined)[]): string =>
+  fechas.filter((f): f is string => !!f).sort().at(-1) as string;
 
-const CLIENTES_SIN_GRABACION = new Set(["material-cliente", "pedidos-diarios", "pack"]);
+// ---------- unit generation ----------
 
 function unidadesDePiezas(input: PlannerInput, alertas: Alerta[]): UnidadTrabajo[] {
   const { clients, piezas, grabaciones, today } = input;
-  const tiempos = input.tiempos ?? DEFAULT_TIEMPOS_PIEZA;
+  const pesos = pesosPieza(input.estructura);
   const todayISO = toISODate(today);
   const clientById = new Map(clients.map((c) => [c.id, c]));
   const unidades: UnidadTrabajo[] = [];
   const sinGrabacion = new Map<string, number>();
-  const desdeDe = (p: Pieza) => (p.noAntesDe && p.noAntesDe > todayISO ? p.noAntesDe : todayISO);
 
   for (const p of piezas) {
     const client = clientById.get(p.clienteId);
     if (!client || !client.activo || client.estado === "en-pausa") continue;
+    if (p.estado !== "aprobada" && p.estado !== "grabada") continue;
 
     const grab = p.grabacionId ? grabaciones.find((g) => g.id === p.grabacionId) : undefined;
     const etiquetaBase = p.titulo ?? p.tipo;
+    const entrega = fechaEntregaDe(p, grabaciones);
+    const modo = inicioDe(client);
+    const desdeBase = maxISO(todayISO, p.noAntesDe, modo === "fecha" ? client.flujo.inicioFecha : undefined);
 
-    if (p.estado === "grabada") {
-      unidades.push({
-        id: `${p.id}:edicion`,
-        tipo: "edicion",
-        categoria: "produccion",
-        clienteId: p.clienteId,
-        piezaId: p.id,
-        etiqueta: `Editar · ${etiquetaBase}`,
-        horas: tiempos[p.tipo].edicion,
-        desde: desdeDe(p),
-        limite: fechaEntregaDe(p, grabaciones),
-        intocable: client.intocable,
-      });
+    const edicion = (desde: string, verbo: string, provisoria: boolean): UnidadTrabajo => ({
+      id: `${p.id}:edicion`,
+      tipo: "edicion",
+      categoria: "produccion",
+      clienteId: p.clienteId,
+      piezaId: p.id,
+      piezaTipo: p.tipo,
+      etiqueta: `${verbo} · ${etiquetaBase}`,
+      peso: pesos[p.tipo],
+      desde,
+      objetivo: entrega ? objetivoDe(entrega, client) : undefined,
+      limite: entrega,
+      repartir: !!entrega,
+      provisoria,
+      intocable: client.intocable,
+    });
+
+    if (p.estado === "grabada" || (grab && grab.hecha)) {
+      unidades.push(edicion(desdeBase, "Editar", false));
       continue;
     }
 
-    if (p.estado !== "aprobada") continue;
-
-    if (grab && !grab.hecha) {
+    if (grab) {
       // Script prep unblocks the recording: must be done the day before it
       // (before any travel days block the calendar).
       if (!p.guionListo) {
-        const ultimoDia = addDays(fromISODate(grab.fecha), -1 - grab.viajeDiasAntes);
+        const ultimoDia = toISODate(addDays(fromISODate(grab.fecha), -1 - grab.viajeDiasAntes));
         unidades.push({
           id: `${p.id}:guion`,
           tipo: "guion",
           categoria: "produccion",
           clienteId: p.clienteId,
           piezaId: p.id,
+          piezaTipo: p.tipo,
           etiqueta: `Guion · ${etiquetaBase}`,
-          horas: tiempos[p.tipo].guion,
-          desde: desdeDe(p),
-          limite: toISODate(ultimoDia),
+          peso: PESO_GUION,
+          desde: desdeBase,
+          objetivo: ultimoDia,
+          limite: ultimoDia,
+          repartir: false,
           intocable: client.intocable,
         });
       }
-    } else if (CLIENTES_SIN_GRABACION.has(client.tipo)) {
-      unidades.push({
-        id: `${p.id}:edicion`,
-        tipo: "edicion",
-        categoria: "produccion",
-        clienteId: p.clienteId,
-        piezaId: p.id,
-        etiqueta: `Producir · ${etiquetaBase}`,
-        horas: tiempos[p.tipo].edicion,
-        desde: desdeDe(p),
-        limite: fechaEntregaDe(p, grabaciones),
-        intocable: client.intocable,
-      });
-    } else if (!grab) {
+      // Provisional editing: not shot yet, but it will be, so it already takes
+      // its place in the days after the recording (and its travel back).
+      const despues = toISODate(addDays(fromISODate(grab.fecha), 1 + grab.viajeDiasDespues));
+      unidades.push(edicion(maxISO(desdeBase, despues), "Editar", true));
+    } else if (modo === "grabacion") {
       sinGrabacion.set(client.id, (sinGrabacion.get(client.id) ?? 0) + 1);
+    } else {
+      unidades.push(edicion(desdeBase, "Producir", false));
     }
   }
 
@@ -282,22 +311,26 @@ function unidadesDeCalendario(input: PlannerInput, alertas: Alerta[]): UnidadTra
         clienteId: client.id,
         mensaje: `${client.nombre}: arrancá el calendario de ${proximo}`,
       });
-      const limite = addDays(finalDelPeriodo, -DIAS_ANTICIPO_CALENDARIO);
+      const limite = toISODate(maxDate(addDays(finalDelPeriodo, -DIAS_ANTICIPO_CALENDARIO), today));
       unidades.push({
         id: `${client.id}:calendario:${proximo}`,
         tipo: "ideas",
         categoria: "ideas",
         clienteId: client.id,
         etiqueta: `Calendario ${proximo}`,
-        horas: HORAS_CALENDARIO,
+        peso: PESO_CALENDARIO,
         desde: todayISO,
-        limite: toISODate(limite < today ? today : limite),
+        objetivo: limite,
+        limite,
+        repartir: false,
         intocable: client.intocable,
       });
     }
   }
   return unidades;
 }
+
+const maxDate = (a: Date, b: Date) => (a > b ? a : b);
 
 // ---------- capacity ----------
 
@@ -318,17 +351,6 @@ function bloqueosDeGrabaciones(grabaciones: Grabacion[]): Map<string, "grabacion
   return map;
 }
 
-function capacidadBase(date: Date, estructura: EstructuraSemanal): number {
-  const dow = date.getDay();
-  const total = estructura.horasPorDia[dow] ?? 0;
-  if (total <= 0) return 0;
-  const fijos = (estructura.fijosDiarios ?? []).reduce((s, f) => s + f.horas, 0);
-  const actividades = (estructura.actividadesFijas ?? [])
-    .filter((a) => a.diaSemana === dow)
-    .reduce((s, a) => s + a.horas, 0);
-  return Math.max(total - fijos - actividades, 0);
-}
-
 // ---------- the planner ----------
 
 interface Slot {
@@ -343,6 +365,8 @@ export function planificar(input: PlannerInput): Plan {
   const overrides = input.overrides ?? {};
   const horizonte = input.horizonteDias ?? HORIZONTE_DEFAULT;
   const todayISO = toISODate(today);
+  const tope = topePiezas(estructura);
+  const trabajo = new Set(diasDeTrabajo(estructura));
   const alertas: Alerta[] = [];
 
   // ---- day slots ----
@@ -362,13 +386,20 @@ export function planificar(input: PlannerInput): Plan {
       bloqueo = "no-trabajo";
     } else if (fecha in overrides) {
       capacidad = Math.max(overrides[fecha], 0);
+    } else if (trabajo.has(d.getDay())) {
+      capacidad = tope;
     } else {
-      capacidad = capacidadBase(d, estructura);
-      if (capacidad === 0) bloqueo = "libre-semana";
+      capacidad = 0;
+      bloqueo = "libre-semana";
     }
     slots.push({ fecha, capacidad, usadas: 0, bloqueo });
   }
-  const slotIndex = new Map(slots.map((s, i) => [s.fecha, i]));
+
+  /** Index of the last slot on or before `fecha` (-1 if none). */
+  function hasta(fecha: string): number {
+    for (let i = slots.length - 1; i >= 0; i--) if (slots[i].fecha <= fecha) return i;
+    return -1;
+  }
 
   // ---- units ----
   const unidades = [
@@ -377,50 +408,74 @@ export function planificar(input: PlannerInput): Plan {
     ...(input.extras ?? []),
   ];
 
+  /** Units of the same delivery spread together. */
+  const grupo = (u: UnidadTrabajo) => `${u.clienteId ?? u.id}|${u.limite ?? ""}`;
   const tier = (u: UnidadTrabajo): number => {
     if (u.limite && u.limite < todayISO) return 0; // vencido
     if (u.tipo === "guion") return 1; // destraba una grabación
     return 2; // entrega más cercana
   };
+  // Urgency first. Intocable work is never pushed out (see victimasEnDia), but
+  // it doesn't jump ahead of a closer delivery either.
   const orden = (a: UnidadTrabajo, b: UnidadTrabajo): number =>
-    Number(b.intocable) - Number(a.intocable) ||
     tier(a) - tier(b) ||
-    (a.limite ?? "9999").localeCompare(b.limite ?? "9999") ||
+    (a.objetivo ?? a.limite ?? "9999").localeCompare(b.objetivo ?? b.limite ?? "9999") ||
+    Number(b.intocable) - Number(a.intocable) ||
+    grupo(a).localeCompare(grupo(b)) ||
+    b.peso - a.peso ||
     a.id.localeCompare(b.id);
 
   const cola = [...unidades].sort(orden);
   const asignadas: Asignacion[] = [];
   const sinLugar: UnidadTrabajo[] = [];
   const reubicadas = new Set<string>();
+  /** Load each delivery already has on each day, to spread it evenly. */
+  const cargaGrupo = new Map<string, Map<number, number>>();
 
-  const entra = (s: Slot, horas: number) => s.capacidad - s.usadas >= horas - EPS;
+  const entra = (s: Slot, peso: number) => s.capacidad - s.usadas >= peso - EPS;
 
-  function colocar(u: UnidadTrabajo, fecha: string, atrasada: boolean) {
-    const s = slots[slotIndex.get(fecha) as number];
-    s.usadas += u.horas;
-    asignadas.push({ unidad: u, fecha, atrasada });
+  function sumarGrupo(u: UnidadTrabajo, dia: number, signo: 1 | -1) {
+    const g = grupo(u);
+    const m = cargaGrupo.get(g) ?? new Map<number, number>();
+    m.set(dia, (m.get(dia) ?? 0) + signo * u.peso);
+    cargaGrupo.set(g, m);
   }
 
-  function ventana(u: UnidadTrabajo, ignorarLimite: boolean): [number, number] {
+  function colocar(u: UnidadTrabajo, dia: number) {
+    const s = slots[dia];
+    s.usadas += u.peso;
+    sumarGrupo(u, dia, 1);
+    const venc = !!u.limite && u.limite < todayISO;
+    const atrasada = venc || (!!u.limite && s.fecha > u.limite);
+    asignadas.push({ unidad: u, fecha: s.fecha, atrasada, enMargen: !atrasada && !!u.objetivo && s.fecha > u.objetivo });
+  }
+
+  /** [first day, last day by target, last day by delivery] as slot indices. */
+  function ventana(u: UnidadTrabajo, ignorarLimite: boolean): [number, number, number] {
     const desde = u.desde && u.desde > todayISO ? u.desde : todayISO;
     let ini = slots.findIndex((s) => s.fecha >= desde);
     if (ini === -1) ini = slots.length;
-    let fin = slots.length - 1;
-    if (!ignorarLimite && u.limite) {
-      const lim = u.limite < todayISO ? todayISO : u.limite;
-      let idx = -1;
-      for (let i = slots.length - 1; i >= 0; i--) {
-        if (slots[i].fecha <= lim) {
-          idx = i;
-          break;
-        }
-      }
-      fin = idx;
-    }
-    return [ini, fin];
+    const ultimo = slots.length - 1;
+    if (ignorarLimite || !u.limite) return [ini, ultimo, ultimo];
+    const finLim = hasta(maxISO(u.limite, todayISO));
+    const finObj = u.objetivo ? Math.min(hasta(maxISO(u.objetivo, todayISO)), finLim) : finLim;
+    return [ini, finObj, finLim];
   }
 
-  /** Free hours on `slot` taken by units that `u` is allowed to push out. */
+  /** Day in [a, b] with room: the one where its delivery has the least load so
+   * far (even spread), else simply the earliest. */
+  function elegirDia(u: UnidadTrabajo, a: number, b: number): number {
+    const porDia = cargaGrupo.get(grupo(u));
+    let mejor = -1;
+    for (let i = a; i <= b && i < slots.length; i++) {
+      if (!entra(slots[i], u.peso)) continue;
+      if (!u.repartir) return i;
+      if (mejor === -1 || (porDia?.get(i) ?? 0) < (porDia?.get(mejor) ?? 0) - EPS) mejor = i;
+    }
+    return mejor;
+  }
+
+  /** Work on `fecha` that `u` is allowed to push out. */
   function victimasEnDia(u: UnidadTrabajo, fecha: string): Asignacion[] {
     return asignadas
       .filter(
@@ -439,75 +494,67 @@ export function planificar(input: PlannerInput): Plan {
   let guardia = unidades.length * 20 + 100;
   while (cola.length > 0 && guardia-- > 0) {
     const u = cola.shift() as UnidadTrabajo;
-    const venc = !!u.limite && u.limite < todayISO;
     const reubicada = reubicadas.has(u.id);
-    const [ini, fin] = ventana(u, reubicada);
+    const [ini, finObj, finLim] = ventana(u, reubicada);
 
-    // 1) Earliest day with room inside the window.
-    let hecho = false;
-    for (let i = ini; i <= fin; i++) {
-      if (entra(slots[i], u.horas)) {
-        colocar(u, slots[i].fecha, venc || (reubicada && !!u.limite && slots[i].fecha > u.limite));
-        hecho = true;
-        break;
-      }
+    // 1) Spread over the days up to its target date.
+    let dia = elegirDia(u, ini, finObj);
+    // 2) Use the margin between the target and the delivery.
+    if (dia === -1 && finLim > finObj) dia = elegirDia({ ...u, repartir: false }, Math.max(finObj + 1, ini), finLim);
+    if (dia !== -1) {
+      colocar(u, dia);
+      continue;
     }
-    if (hecho) continue;
 
-    // 2) Make room by postponing less important work (Ads → ideas → producción).
+    // 3) Make room by postponing less important work (Ads → ideas → producción).
     if (!u.intocable && !reubicada) {
       let mejor: { dia: number; victimas: Asignacion[] } | undefined;
-      for (let i = ini; i <= fin; i++) {
+      for (let i = ini; i <= finLim; i++) {
         const s = slots[i];
-        if (s.capacidad < u.horas - EPS) continue;
+        if (s.capacidad < u.peso - EPS) continue;
         let libre = s.capacidad - s.usadas;
         const elegidas: Asignacion[] = [];
         for (const v of victimasEnDia(u, s.fecha)) {
-          if (libre >= u.horas - EPS) break;
+          if (libre >= u.peso - EPS) break;
           elegidas.push(v);
-          libre += v.unidad.horas;
+          libre += v.unidad.peso;
         }
-        if (libre >= u.horas - EPS && elegidas.length > 0) {
+        if (libre >= u.peso - EPS && elegidas.length > 0) {
           if (!mejor || elegidas.length < mejor.victimas.length) mejor = { dia: i, victimas: elegidas };
         }
       }
       if (mejor) {
         for (const v of mejor.victimas) {
-          slots[mejor.dia].usadas -= v.unidad.horas;
+          slots[mejor.dia].usadas -= v.unidad.peso;
+          sumarGrupo(v.unidad, mejor.dia, -1);
           asignadas.splice(asignadas.indexOf(v), 1);
           reubicadas.add(v.unidad.id);
           cola.push(v.unidad);
         }
-        colocar(u, slots[mejor.dia].fecha, venc);
+        colocar(u, mejor.dia);
         continue;
       }
     }
 
-    // 3) Fixed work never moves: overload its best day instead of dropping it.
+    // 4) Fixed work never moves: overload its least-loaded day instead of dropping it.
     if (u.intocable) {
       let mejorDia = -1;
-      for (let i = ini; i <= Math.max(fin, ini); i++) {
-        if (i >= slots.length) break;
+      for (let i = ini; i <= Math.max(finObj, ini) && i < slots.length; i++) {
         if (slots[i].capacidad <= 0) continue;
         if (mejorDia === -1 || slots[i].capacidad - slots[i].usadas > slots[mejorDia].capacidad - slots[mejorDia].usadas) {
           mejorDia = i;
         }
       }
       if (mejorDia !== -1) {
-        colocar(u, slots[mejorDia].fecha, venc);
+        colocar(u, mejorDia);
         continue;
       }
     }
 
-    // 4) Doesn't fit by its deadline: place it as soon as it fits after, flagged late.
-    for (let i = Math.max(fin + 1, ini); i < slots.length; i++) {
-      if (entra(slots[i], u.horas)) {
-        colocar(u, slots[i].fecha, true);
-        hecho = true;
-        break;
-      }
-    }
-    if (!hecho) sinLugar.push(u);
+    // 5) Doesn't fit by its delivery: place it as soon as it fits after, flagged late.
+    dia = elegirDia({ ...u, repartir: false }, Math.max(finLim + 1, ini), slots.length - 1);
+    if (dia !== -1) colocar(u, dia);
+    else sinLugar.push(u);
   }
 
   // ---- load per day + alerts ----
@@ -520,7 +567,7 @@ export function planificar(input: PlannerInput): Plan {
     else semaforo = "libre";
     cargaPorDia[s.fecha] = {
       fecha: s.fecha,
-      horas: Math.round(s.usadas * 100) / 100,
+      carga: Math.round(s.usadas * 100) / 100,
       capacidad: s.capacidad,
       semaforo,
       bloqueo: s.bloqueo,
@@ -529,14 +576,15 @@ export function planificar(input: PlannerInput): Plan {
       alertas.push({
         tipo: "dia-sobrecargado",
         fecha: s.fecha,
-        mensaje: `${s.fecha}: ${s.usadas.toFixed(1)} h cargadas para ${s.capacidad.toFixed(1)} h libres`,
+        mensaje: `${s.fecha}: ${fmtPiezas(s.usadas)} piezas cargadas para un tope de ${fmtPiezas(s.capacidad)}`,
       });
     }
   }
 
-  const clientNombre = new Map(input.clients.map((c) => [c.id, c.nombre]));
+  const clientById = new Map(input.clients.map((c) => [c.id, c]));
+  const nombre = (id: string) => clientById.get(id)?.nombre ?? "";
   const conCliente = (u: UnidadTrabajo) =>
-    u.clienteId && clientNombre.has(u.clienteId) ? `${clientNombre.get(u.clienteId)} · ${u.etiqueta}` : u.etiqueta;
+    u.clienteId && clientById.has(u.clienteId) ? `${nombre(u.clienteId)} · ${u.etiqueta}` : u.etiqueta;
   for (const a of asignadas) {
     if (!a.atrasada) continue;
     const venc = a.unidad.limite && a.unidad.limite < todayISO;
@@ -558,7 +606,7 @@ export function planificar(input: PlannerInput): Plan {
     });
   }
 
-  // ---- milestones: recordings and deliveries ----
+  // ---- milestones: recordings, presentations (target date) and deliveries ----
   const hitos: Hito[] = [];
   for (const g of grabaciones) {
     if (g.hecha) continue;
@@ -566,7 +614,7 @@ export function planificar(input: PlannerInput): Plan {
       fecha: g.fecha,
       tipo: "grabacion",
       clienteId: g.clienteId,
-      detalle: `Grabación ${clientNombre.get(g.clienteId) ?? ""}`.trim(),
+      detalle: `Grabación ${nombre(g.clienteId)}`.trim(),
     });
   }
   const entregas = new Map<string, { clienteId: string; fecha: string; n: number }>();
@@ -584,8 +632,17 @@ export function planificar(input: PlannerInput): Plan {
       fecha: e.fecha,
       tipo: "entrega",
       clienteId: e.clienteId,
-      detalle: `Entrega ${clientNombre.get(e.clienteId) ?? ""} · ${e.n} ${e.n === 1 ? "pieza" : "piezas"}`.trim(),
+      detalle: `Entrega ${nombre(e.clienteId)} · ${e.n} ${e.n === 1 ? "pieza" : "piezas"}`.trim(),
     });
+    const client = clientById.get(e.clienteId);
+    if (client && margenDe(client) > 0) {
+      hitos.push({
+        fecha: objetivoDe(e.fecha, client),
+        tipo: "presentacion",
+        clienteId: e.clienteId,
+        detalle: `Presentación ${client.nombre}`,
+      });
+    }
   }
   hitos.sort((a, b) => a.fecha.localeCompare(b.fecha));
 
@@ -599,25 +656,26 @@ export function planificar(input: PlannerInput): Plan {
   return { asignaciones: asignadas, sinLugar, cargaPorDia, hitos, alertas };
 }
 
+export const fmtPiezas = (n: number) => `${Math.round(n * 10) / 10}`.replace(".", ",");
+
 // ---------- helpers built on the plan ----------
 
 export function tareasDelDia(plan: Plan, fechaISO: string): Asignacion[] {
   return plan.asignaciones.filter((a) => a.fecha === fechaISO);
 }
 
-/** "Me sobró tiempo": the next pieces of work, from later days, that fit into
- * today's free hours. Doing them early shortens future days automatically
- * because their estado changes and the plan is re-derived. */
-export function sugerirAdelanto(plan: Plan, hoyISO: string, horasLibresHoy: number): Asignacion[] {
-  const hoy = plan.cargaPorDia[hoyISO];
-  let libre = Math.min(horasLibresHoy, hoy ? hoy.capacidad - hoy.horas : horasLibresHoy);
+/** "Si me sobra tiempo": the next pieces of work, from later days, that can be
+ * done today, up to `pesoMax` pieces. Doing them early lightens future days
+ * automatically because their estado changes and the plan is re-derived. */
+export function sugerirAdelanto(plan: Plan, hoyISO: string, pesoMax: number): Asignacion[] {
+  let libre = pesoMax;
   const sugeridas: Asignacion[] = [];
   for (const a of plan.asignaciones) {
     if (a.fecha <= hoyISO) continue;
     if (a.unidad.desde && a.unidad.desde > hoyISO) continue;
-    if (a.unidad.horas > libre + EPS) continue;
+    if (a.unidad.peso > libre + EPS) continue;
     sugeridas.push(a);
-    libre -= a.unidad.horas;
+    libre -= a.unidad.peso;
     if (libre <= EPS) break;
   }
   return sugeridas;
@@ -640,27 +698,13 @@ export function partirEntrega(
   );
 }
 
-/** Learn editing times from real hours logged on pieces. Blends the current
- * estimate toward the observed average, trusting observations more as they
- * accumulate (capped), and ignores a piece type until it has `minMuestras`. */
-export function ajustarTiempos(
-  piezas: Pieza[],
-  base: TiemposPieza = DEFAULT_TIEMPOS_PIEZA,
-  minMuestras = 3,
-): TiemposPieza {
-  const resultado: TiemposPieza = {
-    historia: { ...base.historia },
-    posteo: { ...base.posteo },
-    reel: { ...base.reel },
-  };
-  (Object.keys(resultado) as PieceType[]).forEach((tipo) => {
-    const muestras = piezas
-      .filter((p) => p.tipo === tipo && p.horasReales != null && p.horasReales > 0)
-      .map((p) => p.horasReales as number);
-    if (muestras.length < minMuestras) return;
-    const promedio = muestras.reduce((s, h) => s + h, 0) / muestras.length;
-    const peso = Math.min(muestras.length / 10, 0.8);
-    resultado[tipo].edicion = Math.round((base[tipo].edicion * (1 - peso) + promedio * peso) * 100) / 100;
-  });
-  return resultado;
+/** Rough monthly load of a client volume against Paula's monthly capacity, in pieces. */
+export function simularCargaPiezas(
+  volumen: { historias: number; posteos: number; reels: number },
+  estructura: EstructuraSemanal,
+): { piezasMes: number; capacidadMes: number } {
+  const pesos = pesosPieza(estructura);
+  const piezasMes = volumen.historias * pesos.historia + volumen.posteos * pesos.posteo + volumen.reels * pesos.reel;
+  const capacidadMes = Math.round(topePiezas(estructura) * diasDeTrabajo(estructura).length * 4.3);
+  return { piezasMes: Math.round(piezasMes * 10) / 10, capacidadMes };
 }

@@ -51,11 +51,6 @@ export function SeccionCiclo({
     .filter((g) => !g.hecha && g.fecha >= hoy)
     .map((g) => g.fecha)
     .sort()[0];
-  const proximaEntrega = piezas
-    .filter((p) => p.estado === "grabada" || p.estado === "editada")
-    .map((p) => fechaEntregaDe(p, grabaciones))
-    .filter((f): f is string => !!f && f >= hoy)
-    .sort()[0];
   const hasta = publicadoHasta(cliente.id, todasLasPiezas);
 
   return (
@@ -63,8 +58,6 @@ export function SeccionCiclo({
       <dl className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-[0.9375rem]">
         <dt className="text-texto-secundario">Próxima grabación</dt>
         <dd className="text-right font-medium">{proximaGrabacion ? fecha(proximaGrabacion) : "—"}</dd>
-        <dt className="text-texto-secundario">Próxima entrega</dt>
-        <dd className="text-right font-medium">{proximaEntrega ? fecha(proximaEntrega) : "—"}</dd>
         <dt className="text-texto-secundario">Publicado hasta</dt>
         <dd className="text-right font-medium">{hasta ? fecha(hasta) : "—"}</dd>
       </dl>
@@ -154,7 +147,6 @@ export function SeccionPiezas({
       ) : (
         <ul className={listaFilas}>
           {ordenadas.map((p) => {
-            const hechaEdicion = p.estado === "editada" || p.estado === "entregada" || p.estado === "programada";
             return (
               <li key={p.id} className="flex flex-wrap items-center gap-2 px-2 py-2.5">
                 <div className="min-w-0 flex-1 basis-40">
@@ -189,23 +181,6 @@ export function SeccionPiezas({
                     </option>
                   ))}
                 </select>
-                {hechaEdicion && (
-                  <input
-                    type="number"
-                    min={0}
-                    step={0.25}
-                    defaultValue={p.horasReales ?? ""}
-                    placeholder="h reales"
-                    aria-label="Horas reales"
-                    onBlur={(e) => {
-                      const v = Number(e.target.value);
-                      if (e.target.value !== "" && v >= 0 && v !== p.horasReales) {
-                        guardar(() => actualizarPieza(p.id, { horasReales: v }));
-                      }
-                    }}
-                    className={`${campo} w-24 py-1.5 text-[0.9375rem]`}
-                  />
-                )}
                 <button
                   onClick={() => guardar(() => eliminarPieza(p.id))}
                   aria-label="Eliminar pieza"

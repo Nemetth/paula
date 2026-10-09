@@ -8,8 +8,8 @@ import { AdsReporte, Client } from "./types";
 
 /** Days between deep reviews of the same account. */
 export const CADENCIA_REVISION_FONDO_DIAS = 14;
-/** Hours a deep review takes. */
-export const HORAS_REVISION_FONDO = 1;
+/** How many pieces a deep review counts as. */
+export const PESO_REVISION_FONDO = 1;
 /** Monthly reports are due on days 1 to this day. */
 export const ULTIMO_DIA_REPORTE = 5;
 
@@ -43,8 +43,9 @@ export function unidadesAdsFondo(clients: Client[], today: Date): UnidadTrabajo[
       categoria: "ads-fondo",
       clienteId: siguiente.id,
       etiqueta: "Revisión a fondo de Ads",
-      horas: HORAS_REVISION_FONDO,
+      peso: PESO_REVISION_FONDO,
       desde: toISODate(today),
+      repartir: false,
       intocable: false,
     },
   ];

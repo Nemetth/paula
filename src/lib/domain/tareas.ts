@@ -16,9 +16,12 @@ export function unidadesDeTareas(tareas: Tarea[], clients: Client[], today: Date
       tareaId: t.id,
       clienteId: t.clienteId && ids.has(t.clienteId) ? t.clienteId : undefined,
       etiqueta: t.titulo,
-      horas: t.horas,
+      // The plan counts pieces: a loose task takes the room of one.
+      peso: 1,
       desde: toISODate(today),
+      objetivo: t.fechaLimite,
       limite: t.fechaLimite,
+      repartir: false,
       intocable: false,
     }));
 }

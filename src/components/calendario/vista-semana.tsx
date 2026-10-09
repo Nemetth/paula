@@ -3,10 +3,11 @@
 import { useState } from "react";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
-import { PackageCheck, Video } from "lucide-react";
 import { DiaCalendario, colorCliente, diasDeLaSemana } from "@/lib/domain/calendario";
 import { toISODate } from "@/lib/domain/dates";
+import { fmtPiezas } from "@/lib/domain/planner";
 import { Client } from "@/lib/domain/types";
+import { IconoHito } from "@/components/entrega";
 import { cn } from "@/lib/utils";
 
 const SEMAFORO: Record<string, string> = {
@@ -15,8 +16,6 @@ const SEMAFORO: Record<string, string> = {
   sobrecargado: "bg-terracota",
   "sin-capacidad": "bg-borde",
 };
-
-const fmt = (h: number) => `${Math.round(h * 100) / 100}`.replace(".", ",");
 
 export function VistaSemana({
   ancla,
@@ -70,17 +69,23 @@ export function VistaSemana({
                   </p>
                   <span
                     className={cn("h-2.5 w-2.5 rounded-full", SEMAFORO[carga?.semaforo ?? "sin-capacidad"])}
-                    title={carga ? `${fmt(carga.horas)} de ${fmt(carga.capacidad)} h` : "Fuera del plan"}
+                    title={carga ? `${fmtPiezas(carga.carga)} de ${fmtPiezas(carga.capacidad)} piezas` : "Fuera del plan"}
                   />
                 </header>
                 <p className="mb-2 text-[0.8125rem] text-texto-secundario">
-                  {carga ? `${fmt(carga.horas)} / ${fmt(carga.capacidad)} h` : "—"}
+                  {carga ? `${fmtPiezas(carga.carga)} / ${fmtPiezas(carga.capacidad)} piezas` : "—"}
                 </p>
 
                 {info?.hitos.map((h, i) => (
-                  <p key={i} className="mb-1.5 flex items-center gap-1.5 text-[0.8125rem] font-medium">
-                    {h.tipo === "grabacion" ? <Video size={12} /> : <PackageCheck size={12} />}
-                    <span className="truncate">{h.detalle}</span>
+                  <p
+                    key={i}
+                    className="mb-1.5 flex items-center gap-1.5 text-[0.8125rem] font-medium"
+                    style={{ color: colorCliente(clients, h.clienteId) }}
+                  >
+                    <span className="shrink-0">
+                      <IconoHito tipo={h.tipo} />
+                    </span>
+                    <span className="truncate text-texto">{h.detalle}</span>
                   </p>
                 ))}
 
@@ -108,9 +113,11 @@ export function VistaSemana({
                           <span className="truncate font-medium">
                             {clients.find((c) => c.id === t.unidad.clienteId)?.nombre ?? "Tarea"}
                           </span>
-                          <span className="ml-auto shrink-0 text-texto-secundario">{fmt(t.unidad.horas)}h</span>
                         </p>
-                        <p className="truncate text-texto-secundario">{t.unidad.etiqueta}</p>
+                        <p className="truncate text-texto-secundario">
+                          {t.unidad.etiqueta}
+                          {t.unidad.provisoria && " · provisoria"}
+                        </p>
                       </li>
                     );
                   })}
@@ -121,7 +128,7 @@ export function VistaSemana({
         </div>
       </div>
       <p className="mt-2 text-[0.8125rem] text-texto-secundario">
-        Arrastrá una tarea a otro día para fijarle una fecha. La app siempre usa el primer día con lugar desde esa fecha.
+        Arrastrá una tarea a otro día para que no arranque antes de esa fecha. Cada entrega se reparte parejo hasta su fecha objetivo.
       </p>
     </div>
   );

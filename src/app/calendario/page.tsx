@@ -1,13 +1,17 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { addMonths, addWeeks, endOfMonth, format, startOfMonth } from "date-fns";
 import { es } from "date-fns/locale";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, Star } from "lucide-react";
 import { actualizarPieza } from "@/lib/supabase/data";
 import { usePlan } from "@/lib/supabase/use-plan";
-import { armarDias, cierreDelMes, diasDeLaSemana, grillaDelMes } from "@/lib/domain/calendario";
-import { toISODate } from "@/lib/domain/dates";
+import { armarDias, cierreDelMes, colorCliente, diasDeLaSemana, grillaDelMes } from "@/lib/domain/calendario";
+import { fechasEspecialesDelMes } from "@/lib/domain/fechas-especiales";
+import { fmtPiezas } from "@/lib/domain/planner";
+import { fromISODate, toISODate } from "@/lib/domain/dates";
+import { SEMAFORO_ENTREGA, SemaforoPunto, avanceTexto, fechaDM } from "@/components/entrega";
 import { VistaMes } from "@/components/calendario/vista-mes";
 import { VistaSemana } from "@/components/calendario/vista-semana";
 import { DetalleDia } from "@/components/calendario/detalle-dia";
@@ -32,6 +36,7 @@ export default function CalendarioPage() {
   const piezas = ctx?.piezas;
   const grabaciones = ctx?.grabaciones;
   const cobros = ctx?.cobros;
+  const entregas = ctx?.entregas;
 
   const dias = useMemo(() => {
     if (!plan) return null;
@@ -44,7 +49,9 @@ export default function CalendarioPage() {
     [plan, piezas, grabaciones, ancla],
   );
 
-  if (!plan || !dias || !clients || !cierre) {
+  const especiales = useMemo(() => (clients ? fechasEspecialesDelMes(ancla, clients) : []), [ancla, clients]);
+
+  if (!plan || !dias || !clients || !cierre || !entregas) {
     return <Cargando />;
   }
 
@@ -67,6 +74,9 @@ export default function CalendarioPage() {
   const detalle = seleccionado ? dias[seleccionado] : undefined;
   const finMes = toISODate(endOfMonth(ancla)) < hoyISO;
   const nombreMes = format(startOfMonth(ancla), "MMMM", { locale: es });
+  const mesISO = toISODate(ancla).slice(0, 7);
+  const entregasDelMes = entregas.filter((e) => e.fecha.startsWith(mesISO));
+  const nombre = (id: string) => clients.find((c) => c.id === id)?.nombre ?? "";
 
   return (
     <div className="mx-auto max-w-[640px] px-4 pt-2 lg:max-w-[1180px] lg:px-8 lg:pt-4">
@@ -118,11 +128,75 @@ export default function CalendarioPage() {
             ancla={ancla}
             dias={dias}
             clients={clients}
+            especiales={especiales}
             seleccionado={seleccionado}
             onSeleccionar={setSeleccionado}
             hoyISO={hoyISO}
           />
-          {detalle && <DetalleDia info={detalle} clients={clients} />}
+          {detalle && (
+            <DetalleDia info={detalle} clients={clients} especial={especiales.find((e) => e.fecha === detalle.fecha)} />
+          )}
+
+          <section className="entra mt-6">
+            <h2 className="titulo-serif mb-2 text-[1.25rem] font-medium">Entregas de {nombreMes}</h2>
+            {entregasDelMes.length === 0 ? (
+              <p className="text-[0.9375rem] text-texto-secundario">No hay entregas con fecha este mes.</p>
+            ) : (
+              <ul className="papel flex flex-col divide-y divide-borde/80 px-1.5">
+                {entregasDelMes.map((e) => (
+                  <li key={`${e.clienteId}-${e.fecha}`}>
+                    <Link
+                      href={`/clientes/${e.clienteId}`}
+                      className="tocable flex items-start gap-3 rounded-[12px] px-2.5 py-3 hover:bg-bg-hundida/60"
+                    >
+                      <SemaforoPunto semaforo={e.semaforo} className="mt-1.5" />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[0.9375rem]">
+                          <span
+                            className="mr-1.5 inline-block h-2 w-2 rounded-full align-middle"
+                            style={{ background: colorCliente(clients, e.clienteId) }}
+                            aria-hidden
+                          />
+                          <span className="font-semibold">{nombre(e.clienteId)}</span>
+                          <span className="numeros text-texto-secundario">
+                            {" "}
+                            · {e.hechas} de {e.total} · vence {fechaDM(e.fecha)}
+                          </span>
+                        </p>
+                        <p className="text-[0.8125rem] text-texto-secundario">
+                          {avanceTexto(e.porTipo)}
+                          {e.provisoria && " · falta grabar"}
+                        </p>
+                      </div>
+                      <span className={cn("shrink-0 text-[0.8125rem] font-medium", SEMAFORO_ENTREGA[e.semaforo].texto)}>
+                        {SEMAFORO_ENTREGA[e.semaforo].label}
+                      </span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+
+          {especiales.length > 0 && (
+            <section className="entra mt-6">
+              <h2 className="titulo-serif mb-2 text-[1.25rem] font-medium">Fechas especiales</h2>
+              <ul className="papel flex flex-col divide-y divide-borde/80 px-1.5">
+                {especiales.map((f) => (
+                  <li key={`${f.fecha}-${f.nombre}`} className="flex items-start gap-3 px-2.5 py-3 text-[0.9375rem]">
+                    <Star size={14} className="mt-1 shrink-0 fill-ambar text-ambar" />
+                    <span className="numeros w-12 shrink-0 font-medium">{format(fromISODate(f.fecha), "d MMM", { locale: es })}</span>
+                    <span className="min-w-0 flex-1">
+                      {f.nombre}
+                      <span className="block text-[0.8125rem] text-texto-secundario">
+                        {f.clienteIds.length > 0 ? f.clienteIds.map(nombre).join(", ") : "Todos los rubros"}
+                      </span>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
 
           <section className="papel entra mt-6 px-4 py-3.5">
             <h2 className="titulo-serif mb-2 text-[1.25rem] font-medium">Cierre de {nombreMes}</h2>
@@ -131,19 +205,17 @@ export default function CalendarioPage() {
               <dd className="text-right font-medium">{cierre.entregadas}</dd>
               <dt className="text-texto-secundario">Pendientes</dt>
               <dd className="text-right font-medium">{cierre.pendientes}</dd>
-              <dt className="text-texto-secundario">Horas planificadas</dt>
+              <dt className="text-texto-secundario">Piezas planificadas</dt>
               <dd className="text-right font-medium">
-                {cierre.horasPlanificadas} de {cierre.capacidadHoras} h
+                {fmtPiezas(cierre.cargaPlanificada)} de {fmtPiezas(cierre.capacidad)}
               </dd>
-              <dt className="text-texto-secundario">Horas reales cargadas</dt>
-              <dd className="text-right font-medium">{cierre.horasReales} h</dd>
               <dt className="text-texto-secundario">Días libres de carga</dt>
               <dd className="text-right font-medium">{cierre.diasLibres}</dd>
             </dl>
             <p className="mt-3 text-[0.8125rem] text-texto-secundario">
               {finMes
-                ? "El plan solo cubre desde hoy, así que un mes pasado no tiene horas."
-                : "Planificado y días libres cuentan desde hoy. Las horas reales son las que cargaste en las piezas."}
+                ? "El plan solo cubre desde hoy, así que un mes pasado no tiene carga planificada."
+                : "Planificado y días libres cuentan desde hoy, contra tu tope de piezas por día."}
             </p>
           </section>
         </>
