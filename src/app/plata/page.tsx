@@ -16,7 +16,7 @@ import {
 import { balanceDelMes, proximoAumento } from "@/lib/domain/plata";
 import { CobroEstado } from "@/lib/domain/types";
 import { estadoCobro } from "@/lib/domain/cobros";
-import { toISODate } from "@/lib/domain/dates";
+import { fechaCorta, fromISODate, nombreMes, toISODate } from "@/lib/domain/dates";
 import { EmptyState } from "@/components/empty-state";
 import { cn, indice } from "@/lib/utils";
 
@@ -70,9 +70,8 @@ export default function PlataPage() {
   const totalPendiente = filas
     .filter((f) => f.estado !== "pagado")
     .reduce((sum, f) => sum + (f.cobro.monto ?? 0), 0);
-  const totalVencido = filas
-    .filter((f) => f.estado === "vencido")
-    .reduce((sum, f) => sum + (f.cobro.monto ?? 0), 0);
+  const vencidas = filas.filter((f) => f.estado === "vencido");
+  const totalVencido = vencidas.reduce((sum, f) => sum + (f.cobro.monto ?? 0), 0);
 
   return (
     <div className="mx-auto max-w-[640px] px-4 pt-2 lg:max-w-[880px] lg:px-8 lg:pt-4">
@@ -87,9 +86,10 @@ export default function PlataPage() {
         <div className="papel entra px-4 py-3.5" style={indice(1)}>
           <p className="text-[0.8125rem] text-texto-secundario">Por cobrar este mes</p>
           <Monto valor={totalPendiente} className="text-[1.75rem]" />
-          {totalVencido > 0 ? (
+          {vencidas.length > 0 ? (
             <p className="numeros text-[0.8125rem] font-medium text-terracota">
-              ${totalVencido.toLocaleString("es-AR")} vencido
+              {vencidas.length === 1 ? "1 cobro vencido" : `${vencidas.length} cobros vencidos`}
+              {totalVencido > 0 && ` · $${totalVencido.toLocaleString("es-AR")}`}
             </p>
           ) : (
             <p className="text-[0.8125rem] text-texto-secundario">Nada vencido</p>
@@ -107,7 +107,7 @@ export default function PlataPage() {
               <div className="min-w-0 flex-1">
                 <p className="font-semibold truncate">{cliente!.nombre}</p>
                 <p className="text-[0.8125rem] text-texto-secundario">
-                  Vence {format(new Date(cobro.fechaVencimiento), "d MMM", { locale: es })}
+                  Vence {fechaCorta(cobro.fechaVencimiento)}
                   {cobro.monto ? ` · $${cobro.monto.toLocaleString("es-AR")}` : ""}
                 </p>
               </div>
@@ -240,7 +240,7 @@ function AumentosSection({ clients }: { clients: NonNullable<ReturnType<typeof u
             <div className="min-w-0 flex-1">
               <p className="truncate font-semibold">{c.nombre}</p>
               <p className={cn("text-[0.8125rem]", prox.dias <= 0 ? "text-terracota" : prox.dias <= 30 ? "text-ambar" : "text-texto-secundario")}>
-                {prox.dias < 0 ? `Atrasado ${-prox.dias} d` : prox.dias === 0 ? "Toca hoy" : `En ${prox.dias} d`} · {format(new Date(prox.fecha), "d MMM yyyy", { locale: es })}
+                {prox.dias < 0 ? `Atrasado ${-prox.dias} d` : prox.dias === 0 ? "Toca hoy" : `En ${prox.dias} d`} · {format(fromISODate(prox.fecha), "d MMM yyyy", { locale: es })}
               </p>
             </div>
             <button
@@ -283,7 +283,7 @@ function HistorialSection({
                   .sort((a, b) => b.periodo.localeCompare(a.periodo))
                   .map((x) => (
                     <li key={x.id} className="flex justify-between text-[0.9375rem]">
-                      <span className="text-texto-secundario">{x.periodo}</span>
+                      <span className="text-texto-secundario">{nombreMes(x.periodo, hoy)}</span>
                       <span>
                         {x.monto != null ? `$${x.monto.toLocaleString("es-AR")} · ` : ""}
                         {ESTADO_LABEL[estadoCobro(x, hoy)]}

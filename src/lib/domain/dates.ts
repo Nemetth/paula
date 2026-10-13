@@ -1,6 +1,7 @@
 import {
   addDays,
   eachDayOfInterval,
+  format,
   formatISO,
   isBefore,
   isEqual,
@@ -9,6 +10,7 @@ import {
   startOfDay,
   subDays,
 } from "date-fns";
+import { es } from "date-fns/locale";
 
 export function toISODate(date: Date): string {
   return formatISO(startOfDay(date), { representation: "date" });
@@ -16,6 +18,17 @@ export function toISODate(date: Date): string {
 
 export function fromISODate(iso: string): Date {
   return startOfDay(parseISO(iso));
+}
+
+/** "2026-10-12" → "12 oct", for text Paula reads. */
+export function fechaCorta(iso: string): string {
+  return format(fromISODate(iso), "d MMM", { locale: es });
+}
+
+/** "2026-11" → "noviembre"; adds the year when it isn't the current one. */
+export function nombreMes(periodo: string, today: Date = new Date()): string {
+  const d = fromISODate(`${periodo}-01`);
+  return format(d, d.getFullYear() === today.getFullYear() ? "MMMM" : "MMMM yyyy", { locale: es });
 }
 
 /** Business day = not a weekend and not in the blocked set. Weekend definition

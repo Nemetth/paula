@@ -7,7 +7,7 @@ import { es } from "date-fns/locale";
 import { AlertTriangle, Check, FileText, MessageCircle, PackageCheck, Presentation, Settings, Video } from "lucide-react";
 import { ensureSettings, marcarFijo, marcarMensajeHecho, useFijosHechos, useMensajesHechos } from "@/lib/supabase/data";
 import { usePlan } from "@/lib/supabase/use-plan";
-import { Asignacion, fmtPiezas, sugerirAdelanto, tareasDelDia } from "@/lib/domain/planner";
+import { Asignacion, atrasadasProximas, fmtPiezas, sugerirAdelanto, tareasDelDia } from "@/lib/domain/planner";
 import { GrupoCliente, agruparPorCliente, esUrgente } from "@/lib/domain/hoy";
 import { mensajesPendientes } from "@/lib/domain/mensajes";
 import { completarUnidad, sePuedeTildar } from "@/lib/domain/completar";
@@ -67,7 +67,9 @@ export default function HoyPage() {
 
   const carga = plan.cargaPorDia[todayISO];
   const tareas = tareasDelDia(plan, todayISO);
-  const urgentes = tareas.filter((a) => esUrgente(a, todayISO));
+  // Late work that only fits on a later day still belongs in Urgente, not in
+  // "Si me sobra tiempo".
+  const urgentes = [...tareas.filter((a) => esUrgente(a, todayISO)), ...atrasadasProximas(plan, todayISO)];
   const resto = tareas.filter((a) => !esUrgente(a, todayISO));
   // A day's worth of upcoming work, in case today goes faster than planned.
   const adelantar = sugerirAdelanto(plan, todayISO, topePiezas(estructura));
@@ -234,7 +236,7 @@ export default function HoyPage() {
         </section>
       )}
 
-      {tareas.length === 0 ? (
+      {urgentes.length === 0 && resto.length === 0 ? (
         <EmptyState
           sol={hayDatos}
           title={hayDatos ? "Vas bien — nada para producir hoy" : "Todavía no hay clientes cargados"}
@@ -253,10 +255,13 @@ export default function HoyPage() {
               asignaciones={urgentes}
               clients={clients}
               orden={3}
+              hoyISO={todayISO}
               urgente
             />
           )}
-          {resto.length > 0 && <BloqueTareas titulo="Hoy" asignaciones={resto} clients={clients} orden={4} />}
+          {resto.length > 0 && (
+            <BloqueTareas titulo="Hoy" asignaciones={resto} clients={clients} orden={4} hoyISO={todayISO} />
+          )}
         </>
       )}
 
@@ -267,7 +272,7 @@ export default function HoyPage() {
           asignaciones={adelantar}
           clients={clients}
           orden={5}
-          mostrarFecha
+          hoyISO={todayISO}
         />
       )}
 
@@ -324,7 +329,7 @@ function BloqueTareas({
   clients,
   orden,
   urgente,
-  mostrarFecha,
+  hoyISO,
 }: {
   titulo: string;
   detalle?: string;
@@ -332,7 +337,7 @@ function BloqueTareas({
   clients: Client[];
   orden: number;
   urgente?: boolean;
-  mostrarFecha?: boolean;
+  hoyISO: string;
 }) {
   const grupos = agruparPorCliente(asignaciones, clients);
   return (
@@ -363,7 +368,7 @@ function BloqueTareas({
             key={g.clienteId ?? "otras"}
             grupo={g}
             color={colorCliente(clients, g.clienteId)}
-            mostrarFecha={mostrarFecha}
+            hoyISO={hoyISO}
           />
         ))}
       </ul>
@@ -371,7 +376,7 @@ function BloqueTareas({
   );
 }
 
-function GrupoFila({ grupo, color, mostrarFecha }: { grupo: GrupoCliente; color: string; mostrarFecha?: boolean }) {
+function GrupoFila({ grupo, color, hoyISO }: { grupo: GrupoCliente; color: string; hoyISO: string }) {
   return (
     <li className="papel overflow-hidden">
       <p className="flex items-center gap-2 border-b border-borde/80 px-4 py-2.5">
@@ -381,14 +386,14 @@ function GrupoFila({ grupo, color, mostrarFecha }: { grupo: GrupoCliente; color:
       </p>
       <ul className="flex flex-col divide-y divide-borde/80 px-1.5 py-0.5">
         {grupo.asignaciones.map((a) => (
-          <TareaFila key={a.unidad.id} asignacion={a} mostrarFecha={mostrarFecha} />
+          <TareaFila key={a.unidad.id} asignacion={a} hoyISO={hoyISO} />
         ))}
       </ul>
     </li>
   );
 }
 
-function TareaFila({ asignacion, mostrarFecha }: { asignacion: Asignacion; mostrarFecha?: boolean }) {
+function TareaFila({ asignacion, hoyISO }: { asignacion: Asignacion; hoyISO: string }) {
   const { unidad, atrasada, enMargen } = asignacion;
   const tildable = sePuedeTildar(unidad);
   const [hecha, setHecha] = useState(false);
@@ -419,7 +424,7 @@ function TareaFila({ asignacion, mostrarFecha }: { asignacion: Asignacion; mostr
               {fechaCorta(unidad.limite)}
             </span>
           )}
-          {mostrarFecha && <span>· planeada {fechaCorta(asignacion.fecha)}</span>}
+          {asignacion.fecha !== hoyISO && <span>· planeada {fechaCorta(asignacion.fecha)}</span>}
           {atrasada && (
             <span className="rounded-[8px] bg-terracota/15 px-1.5 py-0.5 font-medium text-terracota">atrasada</span>
           )}

@@ -1,6 +1,7 @@
 import { differenceInCalendarDays } from "date-fns";
 import { reportesDelMes } from "./ads";
 import { cobrosVencidos } from "./cobros";
+import { nombreMes } from "./dates";
 import { DIAS_APROBACION_DEMORADA } from "./mensajes";
 import { Plan } from "./planner";
 import { AdsReporte, Client, Cobro, Pieza } from "./types";
@@ -67,7 +68,7 @@ export function alertasGlobales(input: {
   const vencidos = cobrosVencidos(cobros, clients, today);
   for (const cobro of vencidos) {
     const nombre = clients.find((c) => c.id === cobro.clienteId)?.nombre ?? "Cliente";
-    out.push({ id: `cobro-${cobro.id}`, grupo: "cobro", mensaje: `Cobro vencido: ${nombre} (${cobro.periodo})`, href: "/plata" });
+    out.push({ id: `cobro-${cobro.id}`, grupo: "cobro", mensaje: `Cobro vencido: ${nombre} (${nombreMes(cobro.periodo, today)})`, href: "/plata" });
   }
 
   const atrasados = reportesDelMes(clients, reportes, today).filter((r) => r.atrasado);

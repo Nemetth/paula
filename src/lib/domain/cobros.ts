@@ -1,13 +1,13 @@
-import { isAfter } from "date-fns";
+import { toISODate } from "./dates";
 import { Client, Cobro, CobroEstado } from "./types";
 
 /** A cobro's effective status: `pagado` sticks, otherwise it flips to
- * `vencido` once `today` is past its `fechaVencimiento` — this is what makes
+ * `vencido` the day after its `fechaVencimiento` — this is what makes
  * "vencido" a fact derived fresh on every read instead of a value someone has
  * to remember to set. */
 export function estadoCobro(cobro: Cobro, today: Date): CobroEstado {
   if (cobro.estado === "pagado") return "pagado";
-  return isAfter(today, new Date(cobro.fechaVencimiento)) ? "vencido" : "pendiente";
+  return toISODate(today) > cobro.fechaVencimiento ? "vencido" : "pendiente";
 }
 
 /** Cobros currently vencido for active clients — the fact the proactive alert

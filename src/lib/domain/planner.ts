@@ -16,7 +16,7 @@
 // Pure functions only: no React, no Supabase.
 
 import { addDays, endOfMonth, format, startOfDay, startOfMonth } from "date-fns";
-import { fromISODate, toISODate } from "./dates";
+import { fechaCorta, fromISODate, nombreMes, toISODate } from "./dates";
 import {
   Client,
   DiaBloqueado,
@@ -101,6 +101,7 @@ export interface Hito {
 export type AlertaTipo =
   | "no-entra"
   | "vencida"
+  | "usa-margen"
   | "dia-sobrecargado"
   | "calendario-nuevo"
   | "contenido-por-acabarse"
@@ -300,7 +301,7 @@ function unidadesDeCalendario(input: PlannerInput, alertas: Alerta[]): UnidadTra
           mensaje:
             diasRestantes < 0
               ? `${client.nombre}: ya no hay contenido programado`
-              : `${client.nombre}: contenido programado hasta ${hasta} (${diasRestantes} d)`,
+              : `${client.nombre}: contenido programado hasta el ${fechaCorta(hasta)} (${diasRestantes} d)`,
         });
       }
     }
@@ -309,7 +310,7 @@ function unidadesDeCalendario(input: PlannerInput, alertas: Alerta[]): UnidadTra
       alertas.push({
         tipo: "calendario-nuevo",
         clienteId: client.id,
-        mensaje: `${client.nombre}: arrancá el calendario de ${proximo}`,
+        mensaje: `${client.nombre}: arrancá el calendario de ${nombreMes(proximo, today)}`,
       });
       const limite = toISODate(maxDate(addDays(finalDelPeriodo, -DIAS_ANTICIPO_CALENDARIO), today));
       unidades.push({
@@ -317,7 +318,7 @@ function unidadesDeCalendario(input: PlannerInput, alertas: Alerta[]): UnidadTra
         tipo: "ideas",
         categoria: "ideas",
         clienteId: client.id,
-        etiqueta: `Calendario ${proximo}`,
+        etiqueta: `Calendario de ${nombreMes(proximo, today)}`,
         peso: PESO_CALENDARIO,
         desde: todayISO,
         objetivo: limite,
@@ -576,7 +577,7 @@ export function planificar(input: PlannerInput): Plan {
       alertas.push({
         tipo: "dia-sobrecargado",
         fecha: s.fecha,
-        mensaje: `${s.fecha}: ${fmtPiezas(s.usadas)} piezas cargadas para un tope de ${fmtPiezas(s.capacidad)}`,
+        mensaje: `${fechaCorta(s.fecha)}: ${fmtPiezas(s.usadas)} piezas cargadas para un tope de ${fmtPiezas(s.capacidad)}`,
       });
     }
   }
@@ -593,8 +594,34 @@ export function planificar(input: PlannerInput): Plan {
       clienteId: a.unidad.clienteId,
       fecha: a.unidad.limite,
       mensaje: venc
-        ? `Vencida (${a.unidad.limite}): ${conCliente(a.unidad)}`
-        : `No entra antes de ${a.unidad.limite}: ${conCliente(a.unidad)} → ${a.fecha}`,
+        ? `Vencida (${fechaCorta(a.unidad.limite as string)}): ${conCliente(a.unidad)}`
+        : `No entra antes del ${fechaCorta(a.unidad.limite as string)}: ${conCliente(a.unidad)} → ${fechaCorta(a.fecha)}`,
+    });
+  }
+  // Work that misses the target (delivery minus margin) but still makes the
+  // delivery: one alert per delivery, so the margin isn't eaten silently.
+  const enMargen = new Map<string, { clienteId?: string; objetivo: string; limite: string; n: number; hasta: string }>();
+  for (const a of asignadas) {
+    if (!a.enMargen || !a.unidad.objetivo || !a.unidad.limite) continue;
+    const key = grupo(a.unidad);
+    const cur = enMargen.get(key) ?? {
+      clienteId: a.unidad.clienteId,
+      objetivo: a.unidad.objetivo,
+      limite: a.unidad.limite,
+      n: 0,
+      hasta: a.fecha,
+    };
+    cur.n += 1;
+    cur.hasta = maxISO(cur.hasta, a.fecha);
+    enMargen.set(key, cur);
+  }
+  for (const m of enMargen.values()) {
+    const quien = m.clienteId && clientById.has(m.clienteId) ? `${nombre(m.clienteId)}: ` : "";
+    alertas.push({
+      tipo: "usa-margen",
+      clienteId: m.clienteId,
+      fecha: m.objetivo,
+      mensaje: `${quien}${m.n} ${m.n === 1 ? "tarea no llega" : "tareas no llegan"} al ${fechaCorta(m.objetivo)} — se terminan el ${fechaCorta(m.hasta)}, usando el margen antes de la entrega del ${fechaCorta(m.limite)}`,
     });
   }
   for (const u of sinLugar) {
@@ -672,6 +699,7 @@ export function sugerirAdelanto(plan: Plan, hoyISO: string, pesoMax: number): As
   const sugeridas: Asignacion[] = [];
   for (const a of plan.asignaciones) {
     if (a.fecha <= hoyISO) continue;
+    if (a.atrasada) continue; // late work goes to Urgente, see atrasadasProximas
     if (a.unidad.desde && a.unidad.desde > hoyISO) continue;
     if (a.unidad.peso > libre + EPS) continue;
     sugeridas.push(a);
@@ -679,6 +707,14 @@ export function sugerirAdelanto(plan: Plan, hoyISO: string, pesoMax: number): As
     if (libre <= EPS) break;
   }
   return sugeridas;
+}
+
+/** Late work the plan only fits on a later day (today is full). It is already
+ * late, so Hoy shows it as urgent instead of as something to get ahead on. */
+export function atrasadasProximas(plan: Plan, hoyISO: string): Asignacion[] {
+  return plan.asignaciones.filter(
+    (a) => a.atrasada && a.fecha > hoyISO && !(a.unidad.desde && a.unidad.desde > hoyISO),
+  );
 }
 
 /** Split one delivery in two batches. The first half keeps the current

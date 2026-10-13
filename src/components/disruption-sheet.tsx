@@ -10,7 +10,7 @@ import {
   bloquearDia,
   guardarHorasDia,
 } from "@/lib/supabase/data";
-import { fromISODate, toISODate } from "@/lib/domain/dates";
+import { fechaCorta, fromISODate, toISODate } from "@/lib/domain/dates";
 import { Asignacion } from "@/lib/domain/planner";
 import { completarUnidad } from "@/lib/domain/completar";
 import { Client, Grabacion } from "@/lib/domain/types";
@@ -137,7 +137,7 @@ export function DisruptionSheet({
                   <option value="">Elegí una tarea</option>
                   {tareasProximas.map((t) => (
                     <option key={t.unidad.id} value={t.unidad.id}>
-                      {etiqueta(t)} · {t.fecha}
+                      {etiqueta(t)} · {fechaCorta(t.fecha)}
                     </option>
                   ))}
                 </select>
@@ -196,7 +196,7 @@ export function DisruptionSheet({
                   <option value="">Elegí una grabación</option>
                   {grabacionesPendientes.map((g) => (
                     <option key={g.id} value={g.id}>
-                      {nombreCliente.get(g.clienteId) ?? "Cliente"} · {g.fecha}
+                      {nombreCliente.get(g.clienteId) ?? "Cliente"} · {fechaCorta(g.fecha)}
                     </option>
                   ))}
                 </select>
