@@ -223,7 +223,7 @@ export function ClienteForm({
             type="checkbox"
             checked={values.intocable}
             onChange={(e) => set("intocable", e.target.checked)}
-            className="h-[16px] w-[16px] accent-[var(--color-terracota)]"
+            className="h-[16px] w-[16px] accent-[var(--color-oscuro)]"
           />
           Intocable: su trabajo nunca se posterga
         </label>

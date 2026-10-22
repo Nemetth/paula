@@ -370,6 +370,48 @@ export function useTareas(): Tarea[] | undefined {
   }));
 }
 
+/** A unit of work ticked off on a day. Kept so Hoy can show it done and count it. */
+export interface TareaHecha {
+  id: string;
+  fecha: string;
+  unidadId: string;
+  etiqueta: string;
+  clienteId?: string;
+  tipo: string;
+  /** Value the source fact had before the tick, to undo it. */
+  anterior?: string;
+}
+
+type TareaHechaRow = {
+  id: string;
+  fecha: string;
+  unidad_id: string;
+  etiqueta: string;
+  cliente_id: string | null;
+  tipo: string;
+  anterior: string | null;
+};
+
+/** Everything ticked off on `fechaISO`. */
+export function useTareasHechas(fechaISO: string): TareaHecha[] | undefined {
+  const rows = useTable<TareaHechaRow, TareaHecha>("tareas_hechas", (r) => ({
+    id: r.id,
+    fecha: r.fecha,
+    unidadId: r.unidad_id,
+    etiqueta: r.etiqueta,
+    clienteId: r.cliente_id ?? undefined,
+    tipo: r.tipo,
+    anterior: r.anterior ?? undefined,
+  }));
+  return rows?.filter((r) => r.fecha === fechaISO);
+}
+
+/** Units moved to a later day: unit id → first day it can be worked. */
+export function usePospuestas(): Record<string, string> | undefined {
+  const rows = useTable<{ id: string; hasta: string }, { id: string; hasta: string }>("pospuestas", (r) => r);
+  return rows ? Object.fromEntries(rows.map((r) => [r.id, r.hasta])) : undefined;
+}
+
 /** Ids of the WhatsApp messages already sent. */
 export function useMensajesHechos(): Set<string> | undefined {
   const rows = useTable<{ id: string; fecha: string }, string>("mensajes_hechos", (r) => r.id);
@@ -493,6 +535,12 @@ export async function actualizarCliente(id: string, input: Partial<NuevoClienteI
   if (error) throw error;
 }
 
+/** Put an account's last deep review back to `fecha` (null = never reviewed): the undo of a tick. */
+export async function restaurarRevisionAds(id: string, fecha: string | null): Promise<void> {
+  const { error } = await supabase().from("clients").update({ ads_ultima_revision: fecha }).eq("id", id);
+  if (error) throw error;
+}
+
 export async function eliminarCliente(id: string): Promise<void> {
   const { error } = await supabase().from("clients").delete().eq("id", id);
   if (error) throw error;
@@ -544,6 +592,16 @@ export async function actualizarPieza(
 /** Link a piece to a recording, or unlink it with `null` (the generic update drops undefined fields). */
 export async function asignarGrabacion(piezaId: string, grabacionId: string | null): Promise<void> {
   const { error } = await supabase().from("piezas").update({ grabacion_id: grabacionId }).eq("id", piezaId);
+  if (error) throw error;
+}
+
+/** Same change on several pieces at once (a delivery moving as a block). */
+export async function actualizarPiezas(
+  ids: string[],
+  changes: Partial<Omit<Pieza, "id" | "creadaEn">>,
+): Promise<void> {
+  if (ids.length === 0) return;
+  const { error } = await supabase().from("piezas").update(piezaToRow(changes)).in("id", ids);
   if (error) throw error;
 }
 
@@ -619,6 +677,11 @@ export async function guardarChequeoAds(
   if (error) throw error;
 }
 
+export async function quitarChequeoAds(clienteId: string, fecha: string): Promise<void> {
+  const { error } = await supabase().from("ads_chequeos").delete().eq("id", `${fecha}__${clienteId}`);
+  if (error) throw error;
+}
+
 export async function guardarReporteAds(
   clienteId: string,
   periodo: string,
@@ -657,8 +720,42 @@ export async function crearTarea(input: {
   if (error) throw error;
 }
 
-export async function completarTarea(id: string): Promise<void> {
-  const { error } = await supabase().from("tareas").update({ hecha: true }).eq("id", id);
+export async function completarTarea(id: string, hecha = true): Promise<void> {
+  const { error } = await supabase().from("tareas").update({ hecha }).eq("id", id);
+  if (error) throw error;
+}
+
+export async function registrarHecha(fechaISO: string, h: Omit<TareaHecha, "id" | "fecha">): Promise<void> {
+  const { error } = await supabase()
+    .from("tareas_hechas")
+    .upsert({
+      id: `${fechaISO}__${h.unidadId}`,
+      fecha: fechaISO,
+      unidad_id: h.unidadId,
+      etiqueta: h.etiqueta,
+      cliente_id: h.clienteId ?? null,
+      tipo: h.tipo,
+      anterior: h.anterior ?? null,
+    });
+  if (error) throw error;
+}
+
+export async function quitarHecha(id: string): Promise<void> {
+  const { error } = await supabase().from("tareas_hechas").delete().eq("id", id);
+  if (error) throw error;
+}
+
+/** Move units to `hasta` or later: "pasar a mañana" and "cerrar el día". */
+export async function posponerUnidades(unidadIds: string[], hasta: string): Promise<void> {
+  if (unidadIds.length === 0) return;
+  const { error } = await supabase()
+    .from("pospuestas")
+    .upsert(unidadIds.map((id) => ({ id, hasta })));
+  if (error) throw error;
+}
+
+export async function quitarPospuesta(unidadId: string): Promise<void> {
+  const { error } = await supabase().from("pospuestas").delete().eq("id", unidadId);
   if (error) throw error;
 }
 

@@ -24,7 +24,7 @@ export function EntregaActual({ cliente, entregas }: { cliente: Client; entregas
     return (
       <section className="papel mb-8 px-4 py-4">
         <p className="text-[0.8125rem] font-medium text-texto-secundario">Próxima entrega</p>
-        <p className="titulo-serif mt-0.5 text-[1.375rem] font-medium">Sin entregas pendientes</p>
+        <p className="titulo mt-0.5 text-[1.375rem] font-medium">Sin entregas pendientes</p>
         <p className="mt-1 text-[0.8125rem] text-texto-secundario">
           Las piezas aprobadas con fecha de entrega (o con grabación) aparecen acá.
         </p>
@@ -40,7 +40,7 @@ export function EntregaActual({ cliente, entregas }: { cliente: Client; entregas
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-[0.8125rem] font-medium text-texto-secundario">Próxima entrega</p>
-          <p className="titulo-serif mt-0.5 text-[1.75rem] font-medium leading-tight first-letter:uppercase">
+          <p className="titulo mt-0.5 text-[1.75rem] font-medium leading-tight first-letter:uppercase">
             {format(fromISODate(actual.fecha), "EEEE d 'de' MMMM", { locale: es })}
           </p>
           <p className="mt-0.5 text-[0.9375rem] text-texto-secundario">

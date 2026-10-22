@@ -279,7 +279,7 @@ export function SeccionGrabaciones({
                   type="checkbox"
                   checked={g.hecha}
                   onChange={(e) => marcarHecha(g, e.target.checked)}
-                  className="h-[16px] w-[16px] accent-[var(--color-terracota)]"
+                  className="h-[16px] w-[16px] accent-[var(--color-oscuro)]"
                 />
                 Hecha
               </label>

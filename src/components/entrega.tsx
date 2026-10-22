@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
 export const SEMAFORO_ENTREGA: Record<SemaforoEntrega, { label: string; punto: string; texto: string }> = {
   verde: { label: "En camino", punto: "bg-verde", texto: "text-verde" },
   ambar: { label: "Justa", punto: "bg-ambar", texto: "text-ambar" },
-  rojo: { label: "En riesgo", punto: "bg-terracota", texto: "text-terracota" },
+  rojo: { label: "En riesgo", punto: "bg-acento", texto: "text-acento-texto" },
   lista: { label: "Lista", punto: "bg-verde", texto: "text-verde" },
 };
 

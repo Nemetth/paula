@@ -13,7 +13,7 @@ import { cn } from "@/lib/utils";
 const SEMAFORO: Record<string, string> = {
   libre: "bg-verde",
   justo: "bg-ambar",
-  sobrecargado: "bg-terracota",
+  sobrecargado: "bg-acento",
   "sin-capacidad": "bg-borde",
 };
 
@@ -59,12 +59,12 @@ export function VistaSemana({
                 aria-label={format(d, "EEEE d", { locale: es })}
                 className={cn(
                   "papel flex min-h-[200px] flex-col p-2 transition-[transform,box-shadow,border-color] duration-300",
-                  sobre === iso && "-translate-y-1 border-terracota/60 shadow-papel-alto",
-                  iso === hoyISO && "ring-2 ring-terracota/25",
+                  sobre === iso && "-translate-y-1 border-acento/60 shadow-papel-alto",
+                  iso === hoyISO && "ring-2 ring-acento/25",
                 )}
               >
                 <header className="mb-2 flex items-center justify-between">
-                  <p className={cn("text-[0.8125rem] font-medium capitalize", iso === hoyISO && "text-terracota")}>
+                  <p className={cn("text-[0.8125rem] font-medium capitalize", iso === hoyISO && "text-acento-texto")}>
                     {format(d, "EEE d", { locale: es })}
                   </p>
                   <span
@@ -102,7 +102,7 @@ export function VistaSemana({
                         className={cn(
                           "rounded-[10px] bg-bg-hundida px-2 py-1.5 text-[0.8125rem] transition-[transform,box-shadow]",
                           arrastrable && "cursor-grab hover:-translate-y-px hover:shadow-papel active:cursor-grabbing",
-                          t.atrasada && "bg-terracota/10",
+                          t.atrasada && "bg-acento/10",
                         )}
                       >
                         <p className="flex items-center gap-1.5">

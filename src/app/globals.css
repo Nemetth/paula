@@ -1,32 +1,31 @@
 @import "tailwindcss";
 
 :root {
-  --color-terracota: #d9502d;
-  --color-verde: #3f7a5c;
-  --color-ambar: #c98a2e;
+  /* Cool greys carry the surface; one pastel pink is the accent; dark grey marks
+   * what matters most. Status colors (verde, ámbar) stay for status only. */
+  --color-acento: #f4b4c9;
+  --color-acento-texto: #b23a64;
+  --color-sobre-acento: #3a1626;
+  --color-oscuro: #2a2e36;
+  --color-sobre-oscuro: #f6f7f9;
+  --color-verde: #3b8466;
+  --color-ambar: #c28a2c;
   --color-error: #b3261e;
-  --color-bg: #faf7f2;
-  --color-bg-elevada: #fdfcfa;
-  --color-bg-hundida: #f3eee5;
-  --color-texto: #211d18;
-  --color-texto-secundario: #6b6558;
-  --color-borde: #e8e2d6;
+  --color-bg: #eceff3;
+  --color-bg-elevada: #ffffff;
+  --color-bg-hundida: #f1f3f6;
+  --color-texto: #20242b;
+  --color-texto-secundario: #667085;
+  --color-borde: #e1e5eb;
 
-  /* Depth: warm-tinted, always offset — light comes from above-left. */
-  --shadow-nav: 0 -2px 16px rgba(33, 29, 24, 0.08);
-  --shadow-sheet: 0 -8px 40px rgba(33, 29, 24, 0.18);
-  --shadow-papel: 0 1px 0 rgba(255, 255, 255, 0.9) inset, 0 1px 2px rgba(84, 52, 22, 0.05),
-    0 6px 18px -8px rgba(84, 52, 22, 0.12);
-  --shadow-papel-alto: 0 1px 0 rgba(255, 255, 255, 0.9) inset, 0 2px 4px rgba(84, 52, 22, 0.06),
-    0 14px 30px -12px rgba(84, 52, 22, 0.22);
-  --shadow-boton: 0 1px 0 rgba(255, 255, 255, 0.22) inset, 0 -1px 0 rgba(0, 0, 0, 0.12) inset,
-    0 2px 6px -1px rgba(160, 52, 20, 0.35);
+  /* Depth: cool-tinted, always offset — light comes from above. */
+  --shadow-nav: 0 -2px 16px rgba(30, 40, 60, 0.08);
+  --shadow-sheet: 0 -8px 40px rgba(30, 40, 60, 0.2);
+  --shadow-papel: 0 1px 2px rgba(30, 40, 60, 0.04), 0 8px 22px -10px rgba(30, 40, 60, 0.12);
+  --shadow-papel-alto: 0 2px 4px rgba(30, 40, 60, 0.06), 0 16px 32px -12px rgba(30, 40, 60, 0.22);
+  --shadow-boton: 0 1px 0 rgba(255, 255, 255, 0.14) inset, 0 6px 14px -6px rgba(30, 40, 60, 0.5);
 
-  /* Paper grain (static SVG noise tiles, painted as background layers — no
-   * blend modes, no overlay) + ambient light strength, tuned per theme. */
-  --grano: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 .42  0 0 0 0 .3  0 0 0 0 .18  0 0 0 .22 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
-  --grano-fino: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 .42  0 0 0 0 .3  0 0 0 0 .18  0 0 0 .1 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
-  --luz-opacidad: 0.55;
+  --luz-opacidad: 0.7;
 
   --ease-salida: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-resorte: cubic-bezier(0.34, 1.56, 0.64, 1);
@@ -34,32 +33,35 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --color-terracota: #e8693f;
-    --color-verde: #4f9573;
+    --color-acento: #f2a9c1;
+    --color-acento-texto: #f6b0c6;
+    --color-sobre-acento: #3a1626;
+    --color-oscuro: #333947;
+    --color-sobre-oscuro: #f6f7f9;
+    --color-verde: #55a583;
     --color-ambar: #d9a24e;
     --color-error: #f2877e;
-    --color-bg: #1b1712;
-    --color-bg-elevada: #241e18;
-    --color-bg-hundida: #16120e;
-    --color-texto: #f5f0e6;
-    --color-texto-secundario: #b5ac9a;
-    --color-borde: #362e24;
+    --color-bg: #121418;
+    --color-bg-elevada: #1c1f26;
+    --color-bg-hundida: #14171c;
+    --color-texto: #eceef2;
+    --color-texto-secundario: #a0a8b5;
+    --color-borde: #2a2e37;
     --shadow-nav: 0 -2px 16px rgba(0, 0, 0, 0.35);
     --shadow-sheet: 0 -8px 40px rgba(0, 0, 0, 0.5);
-    --shadow-papel: 0 1px 0 rgba(255, 240, 220, 0.04) inset, 0 1px 2px rgba(0, 0, 0, 0.3),
-      0 8px 20px -10px rgba(0, 0, 0, 0.5);
-    --shadow-papel-alto: 0 1px 0 rgba(255, 240, 220, 0.05) inset, 0 2px 4px rgba(0, 0, 0, 0.35),
-      0 16px 32px -12px rgba(0, 0, 0, 0.6);
-    --shadow-boton: 0 1px 0 rgba(255, 255, 255, 0.18) inset, 0 -1px 0 rgba(0, 0, 0, 0.2) inset,
-      0 2px 8px -1px rgba(0, 0, 0, 0.45);
-    --grano: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 .92  0 0 0 0 .8  0 0 0 .07 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
-    --grano-fino: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 .92  0 0 0 0 .8  0 0 0 .04 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
-    --luz-opacidad: 0.22;
+    --shadow-papel: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 20px -10px rgba(0, 0, 0, 0.5);
+    --shadow-papel-alto: 0 2px 4px rgba(0, 0, 0, 0.35), 0 16px 32px -12px rgba(0, 0, 0, 0.6);
+    --shadow-boton: 0 1px 0 rgba(255, 255, 255, 0.1) inset, 0 6px 14px -6px rgba(0, 0, 0, 0.6);
+    --luz-opacidad: 0.2;
   }
 }
 
 @theme inline {
-  --color-terracota: var(--color-terracota);
+  --color-acento: var(--color-acento);
+  --color-acento-texto: var(--color-acento-texto);
+  --color-sobre-acento: var(--color-sobre-acento);
+  --color-oscuro: var(--color-oscuro);
+  --color-sobre-oscuro: var(--color-sobre-oscuro);
   --color-verde: var(--color-verde);
   --color-ambar: var(--color-ambar);
   --color-bg: var(--color-bg);
@@ -68,8 +70,7 @@
   --color-texto: var(--color-texto);
   --color-texto-secundario: var(--color-texto-secundario);
   --color-borde: var(--color-borde);
-  --font-sans: var(--font-inter);
-  --font-serif: var(--font-fraunces);
+  --font-sans: var(--font-outfit);
   --shadow-papel: var(--shadow-papel);
   --shadow-papel-alto: var(--shadow-papel-alto);
   --shadow-boton: var(--shadow-boton);
@@ -85,26 +86,23 @@ body {
 }
 
 body {
-  background: var(--grano) 0 0 / 200px 200px, var(--color-bg);
+  background: var(--color-bg);
   color: var(--color-texto);
-  font-family: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
-  font-feature-settings: "cv11", "ss01";
+  font-family: var(--font-outfit), ui-sans-serif, system-ui, sans-serif;
 }
 
 ::selection {
-  background: color-mix(in oklab, var(--color-terracota) 25%, transparent);
+  background: color-mix(in oklab, var(--color-acento) 45%, transparent);
 }
 
 :focus-visible {
-  outline: 2px solid var(--color-terracota);
+  outline: 2px solid var(--color-acento-texto);
   outline-offset: 2px;
   border-radius: 8px;
 }
 
-/* ───────────── Atmosphere: paper grain + afternoon light ───────────── */
+/* ───────────── Atmosphere: one soft pink pool at the top ───────────── */
 
-/* Two soft pools of warm light behind the content. They drift very slowly,
- * like sun moving across a desk; frozen under reduced motion. */
 .luz {
   pointer-events: none;
   position: fixed;
@@ -113,57 +111,42 @@ body {
   overflow: hidden;
   opacity: var(--luz-opacidad);
 }
-.luz::before,
-.luz::after {
+.luz::before {
   content: "";
   position: absolute;
+  width: 80vmax;
+  height: 46vmax;
+  top: -30vmax;
+  left: 50%;
+  margin-left: -40vmax;
   border-radius: 50%;
-  filter: blur(60px);
-  will-change: transform;
-}
-.luz::before {
-  width: 70vmax;
-  height: 50vmax;
-  top: -28vmax;
-  right: -18vmax;
-  background: radial-gradient(closest-side, color-mix(in oklab, var(--color-ambar) 55%, transparent), transparent);
-  animation: deriva-a 38s ease-in-out infinite alternate;
-}
-.luz::after {
-  width: 55vmax;
-  height: 40vmax;
-  top: -22vmax;
-  left: -20vmax;
-  background: radial-gradient(closest-side, color-mix(in oklab, var(--color-terracota) 32%, transparent), transparent);
-  animation: deriva-b 46s ease-in-out infinite alternate;
-}
-@keyframes deriva-a {
-  to {
-    transform: translate3d(-8vmax, 6vmax, 0) scale(1.08);
-  }
-}
-@keyframes deriva-b {
-  to {
-    transform: translate3d(10vmax, 4vmax, 0) scale(0.94);
-  }
+  filter: blur(70px);
+  background: radial-gradient(closest-side, color-mix(in oklab, var(--color-acento) 70%, transparent), transparent);
 }
 
 @layer components {
 /* ───────────── Surfaces ───────────── */
 
-/* Elevated paper: the one container treatment. Replaces flat bordered boxes. */
+/* White card on the cool grey ground: the one container treatment. */
 .papel {
-  background: var(--grano-fino) 0 0 / 200px 200px, var(--color-bg-elevada);
-  border: 1px solid color-mix(in oklab, var(--color-borde) 85%, transparent);
-  border-radius: 16px;
+  background: var(--color-bg-elevada);
+  border: 1px solid color-mix(in oklab, var(--color-borde) 70%, transparent);
+  border-radius: 20px;
   box-shadow: var(--shadow-papel);
 }
 
-.titulo-serif {
-  font-family: var(--font-fraunces), ui-serif, Georgia, serif;
-  font-variation-settings: "SOFT" 100, "WONK" 0;
-  letter-spacing: -0.02em;
-  font-optical-sizing: auto;
+/* Dark grey card: the one thing on a screen that must stand out. */
+.destacado {
+  background: var(--color-oscuro);
+  color: var(--color-sobre-oscuro);
+  border-radius: 24px;
+  box-shadow: var(--shadow-papel-alto);
+}
+
+.titulo {
+  font-family: var(--font-outfit), ui-sans-serif, system-ui, sans-serif;
+  font-weight: 600;
+  letter-spacing: -0.015em;
 }
 
 /* Sentence case for date-fns' lowercase Spanish dates ("jueves 8 de…"). */
@@ -189,13 +172,13 @@ body {
 }
 
 .boton-primario {
-  background: var(--color-terracota);
-  color: var(--color-bg);
+  background: var(--color-oscuro);
+  color: var(--color-sobre-oscuro);
   box-shadow: var(--shadow-boton);
 }
 @media (hover: hover) {
   .boton-primario:hover {
-    background: color-mix(in oklab, var(--color-terracota) 90%, white);
+    background: color-mix(in oklab, var(--color-oscuro) 88%, white);
   }
 }
 
@@ -218,8 +201,8 @@ body {
 
 .input:focus {
   outline: none;
-  border-color: var(--color-terracota);
-  box-shadow: 0 0 0 3px color-mix(in oklab, var(--color-terracota) 14%, transparent);
+  border-color: var(--color-acento-texto);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--color-acento) 35%, transparent);
 }
 
 /* ───────────── Motion vocabulary ───────────── */
@@ -235,6 +218,18 @@ body {
     opacity: 0;
     transform: translateY(10px);
     filter: blur(4px);
+  }
+}
+
+/* Cards slide in from the side, one after another. */
+.desliza {
+  animation: desliza 560ms var(--ease-salida) backwards;
+  animation-delay: calc(min(var(--i, 0), 12) * 55ms);
+}
+@keyframes desliza {
+  from {
+    opacity: 0;
+    transform: translateX(28px);
   }
 }
 
@@ -333,7 +328,7 @@ body {
   }
 }
 
-/* The tick: circle fills, check draws, row exhales. */
+/* The tick: circle fills pink, check draws, sparks fly, row exhales. */
 .tilde-circulo {
   transition:
     fill 220ms ease,
@@ -342,6 +337,9 @@ body {
 .tilde-check {
   stroke-dasharray: 14;
   stroke-dashoffset: 14;
+}
+[data-listo] .tilde-check {
+  stroke-dashoffset: 0;
 }
 [data-hecho] .tilde-check {
   animation: dibuja 300ms var(--ease-salida) 90ms forwards;
@@ -367,8 +365,11 @@ body {
   height: 4px;
   margin: -2px;
   border-radius: 2px;
-  background: var(--color-verde);
+  background: var(--color-acento);
   opacity: 0;
+}
+.chispa i:nth-child(even) {
+  background: var(--color-oscuro);
 }
 [data-hecho] .chispa i {
   animation: chispa 560ms var(--ease-salida) 60ms forwards;
@@ -388,7 +389,62 @@ body {
 }
 @keyframes fila-sale {
   to {
-    opacity: 0.45;
+    opacity: 0.5;
+  }
+}
+
+/* Progress bar: the fill grows to its value; a soft shine runs along it when it moves. */
+.barra {
+  height: 10px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--color-sobre-oscuro) 16%, transparent);
+}
+.barra-relleno {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--color-acento);
+  transition: width 900ms var(--ease-salida);
+  animation: barra-crece 1000ms var(--ease-salida) 200ms backwards;
+  position: relative;
+  overflow: hidden;
+}
+.barra-relleno::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(100deg, transparent 20%, rgba(255, 255, 255, 0.55) 50%, transparent 80%);
+  transform: translateX(-100%);
+  animation: brillo 1100ms var(--ease-salida) 250ms 1;
+}
+@keyframes barra-crece {
+  from {
+    width: 0;
+  }
+}
+@keyframes brillo {
+  to {
+    transform: translateX(100%);
+  }
+}
+
+/* Swipeable row: follows the finger; the action behind it shows through. */
+.deslizable {
+  touch-action: pan-y;
+  will-change: transform;
+}
+.deslizable[data-suelto] {
+  transition: transform 320ms var(--ease-resorte);
+}
+
+/* Toast with undo: slides up from the bottom. */
+.aviso-sube {
+  animation: aviso-sube 420ms var(--ease-resorte) both;
+}
+@keyframes aviso-sube {
+  from {
+    opacity: 0;
+    transform: translateY(24px) scale(0.96);
   }
 }
 
@@ -399,6 +455,90 @@ body {
 @keyframes reacomoda {
   from {
     transform: rotate(-300deg);
+  }
+}
+
+/* Inki's stamp: paper with perforated edges (four edge masks intersected),
+ * the photo framed inside, and the shadow on the wrapper so the mask doesn't clip it. */
+.estampilla-llega {
+  filter: drop-shadow(0 18px 28px rgba(18, 21, 26, 0.35));
+  animation: estampilla-llega 620ms var(--ease-resorte) both;
+}
+.estampilla-llega[data-cerrando] {
+  animation: estampilla-sale 220ms cubic-bezier(0.5, 0, 0.75, 0) both;
+}
+@keyframes estampilla-llega {
+  from {
+    opacity: 0;
+    transform: translateY(40px) rotate(-9deg) scale(0.8);
+  }
+  to {
+    transform: rotate(-2.5deg);
+  }
+}
+@keyframes estampilla-sale {
+  from {
+    transform: rotate(-2.5deg);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(24px) rotate(4deg) scale(0.92);
+  }
+}
+.estampilla {
+  --r: 5px;
+  --s: 15px;
+  padding: 16px 16px 14px;
+  background: var(--color-sobre-oscuro);
+  color: var(--color-oscuro);
+  -webkit-mask:
+    radial-gradient(circle at 50% 0, #0000 var(--r), #000 calc(var(--r) + 0.5px)) 0 0 / var(--s) 100% repeat-x,
+    radial-gradient(circle at 50% 100%, #0000 var(--r), #000 calc(var(--r) + 0.5px)) 0 0 / var(--s) 100% repeat-x,
+    radial-gradient(circle at 0 50%, #0000 var(--r), #000 calc(var(--r) + 0.5px)) 0 0 / 100% var(--s) repeat-y,
+    radial-gradient(circle at 100% 50%, #0000 var(--r), #000 calc(var(--r) + 0.5px)) 0 0 / 100% var(--s) repeat-y;
+  -webkit-mask-composite: source-in;
+  mask:
+    radial-gradient(circle at 50% 0, #0000 var(--r), #000 calc(var(--r) + 0.5px)) 0 0 / var(--s) 100% repeat-x,
+    radial-gradient(circle at 50% 100%, #0000 var(--r), #000 calc(var(--r) + 0.5px)) 0 0 / var(--s) 100% repeat-x,
+    radial-gradient(circle at 0 50%, #0000 var(--r), #000 calc(var(--r) + 0.5px)) 0 0 / 100% var(--s) repeat-y,
+    radial-gradient(circle at 100% 50%, #0000 var(--r), #000 calc(var(--r) + 0.5px)) 0 0 / 100% var(--s) repeat-y;
+  mask-composite: intersect;
+}
+.estampilla-foto {
+  aspect-ratio: 3 / 4;
+  overflow: hidden;
+  border-radius: 2px;
+  outline: 1.5px solid var(--color-oscuro);
+  outline-offset: 3px;
+}
+.estampilla-texto {
+  margin-top: 16px;
+  text-align: center;
+  font-size: 0.75rem;
+  font-weight: 500;
+  line-height: 1.45;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+.estampilla-texto strong {
+  display: inline-block;
+  margin-top: 2px;
+  padding: 1px 8px 0;
+  border-radius: 4px;
+  background: var(--color-acento);
+  color: var(--color-sobre-acento);
+  font-weight: 700;
+}
+.matasellos {
+  color: var(--color-acento-texto);
+  opacity: 0.8;
+  transform: rotate(-14deg);
+  mix-blend-mode: multiply;
+}
+@media (prefers-color-scheme: dark) {
+  .matasellos {
+    color: var(--color-acento);
+    mix-blend-mode: normal;
   }
 }
 
@@ -449,8 +589,6 @@ body {
     animation-iteration-count: 1 !important;
     transition-duration: 1ms !important;
   }
-  .luz::before,
-  .luz::after,
   .rayos,
   .late {
     animation: none !important;

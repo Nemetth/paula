@@ -21,7 +21,7 @@ export function EstimacionCarga({ volumen, excluirId }: { volumen: VolumenMensua
     <div className="rounded-[16px] bg-bg-hundida px-4 py-3.5">
       <p className="text-[0.8125rem] font-medium text-texto-secundario">Estimación de carga</p>
       <p className="numeros">
-        <span className="titulo-serif text-[1.75rem] font-medium">{fmtPiezas(propia.piezasMes)}</span> piezas por mes{" "}
+        <span className="titulo text-[1.75rem] font-medium">{fmtPiezas(propia.piezasMes)}</span> piezas por mes{" "}
         <span className="font-normal text-texto-secundario">
           · con tu cartera, {fmtPiezas(total)} de ~{propia.capacidadMes}
         </span>

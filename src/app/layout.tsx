@@ -1,21 +1,13 @@
 import type { Metadata, Viewport } from "next";
-import { Fraunces, Inter } from "next/font/google";
+import { Outfit } from "next/font/google";
 import "./globals.css";
 import { AppFrame } from "@/components/app-frame";
 import { ServiceWorkerRegister } from "@/components/service-worker-register";
 
-const inter = Inter({
-  variable: "--font-inter",
+/** One typeface for everything, no serif. */
+const outfit = Outfit({
+  variable: "--font-outfit",
   subsets: ["latin"],
-});
-
-/** Display serif for titles and money/hour readouts only — Inter stays the
- * workhorse for every row and control. */
-const fraunces = Fraunces({
-  variable: "--font-fraunces",
-  subsets: ["latin"],
-  axes: ["SOFT", "opsz"],
-  style: ["normal", "italic"],
 });
 
 export const metadata: Metadata = {
@@ -29,7 +21,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#d9502d",
+  themeColor: "#2a2e36",
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
@@ -37,7 +29,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="es" className={`${inter.variable} ${fraunces.variable} h-full antialiased`}>
+    <html lang="es" className={`${outfit.variable} h-full antialiased`}>
       <body className="min-h-full flex flex-col bg-bg text-texto">
         <div className="luz" aria-hidden />
         <ServiceWorkerRegister />

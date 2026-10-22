@@ -18,6 +18,7 @@ import { CobroEstado } from "@/lib/domain/types";
 import { estadoCobro } from "@/lib/domain/cobros";
 import { fechaCorta, fromISODate, nombreMes, toISODate } from "@/lib/domain/dates";
 import { EmptyState } from "@/components/empty-state";
+import { Encabezado } from "@/components/encabezado";
 import { cn, indice } from "@/lib/utils";
 
 const ESTADO_LABEL: Record<CobroEstado, string> = {
@@ -75,19 +76,14 @@ export default function PlataPage() {
 
   return (
     <div className="mx-auto max-w-[640px] px-4 pt-2 lg:max-w-[880px] lg:px-8 lg:pt-4">
-      <header className="entra mb-6 lg:mb-8">
-        <p className="text-[0.8125rem] font-medium text-texto-secundario mayuscula">
-          {format(new Date(), "MMMM yyyy", { locale: es })}
-        </p>
-        <h1 className="titulo-serif text-[1.875rem] font-medium leading-[1.15] lg:text-[2.25rem]">Plata</h1>
-      </header>
+      <Encabezado titulo="Plata" arriba={format(new Date(), "MMMM yyyy", { locale: es })} />
 
       <div className="mb-7 grid gap-3 lg:grid-cols-[1fr_1.6fr]">
         <div className="papel entra px-4 py-3.5" style={indice(1)}>
           <p className="text-[0.8125rem] text-texto-secundario">Por cobrar este mes</p>
           <Monto valor={totalPendiente} className="text-[1.75rem]" />
           {vencidas.length > 0 ? (
-            <p className="numeros text-[0.8125rem] font-medium text-terracota">
+            <p className="numeros text-[0.8125rem] font-medium text-acento-texto">
               {vencidas.length === 1 ? "1 cobro vencido" : `${vencidas.length} cobros vencidos`}
               {totalVencido > 0 && ` · $${totalVencido.toLocaleString("es-AR")}`}
             </p>
@@ -121,7 +117,7 @@ export default function PlataPage() {
                 className={cn(
                   "tocable shrink-0 rounded-[8px] px-2.5 py-1 text-[0.8125rem] font-medium",
                   estado === "pagado" && "pop bg-verde/15 text-verde",
-                  estado === "vencido" && "bg-terracota/15 text-terracota",
+                  estado === "vencido" && "bg-acento/15 text-acento-texto",
                   estado === "pendiente" && "bg-ambar/15 text-ambar",
                 )}
               >
@@ -153,7 +149,7 @@ function BalanceCard({
     <div className="papel entra grid grid-cols-1 divide-y divide-borde/80 sm:grid-cols-3 sm:divide-x sm:divide-y-0 sm:py-3.5" style={indice(2)}>
       <StatCard label="Cobrado" valor={cobrado} tono="verde" />
       <StatCard label="Gastos" valor={gastado} />
-      <StatCard label="Me queda" valor={queda} tono={queda < 0 ? "terracota" : "neutral"} />
+      <StatCard label="Me queda" valor={queda} tono={queda < 0 ? "acento" : "neutral"} />
     </div>
   );
 }
@@ -182,7 +178,7 @@ function GastosSection({ gastos }: { gastos: NonNullable<ReturnType<typeof useGa
 
   return (
     <section className="mt-8">
-      <h2 className="titulo-serif mb-2 text-[1.25rem] font-medium">Gastos del mes</h2>
+      <h2 className="titulo mb-2 text-[1.25rem] font-medium">Gastos del mes</h2>
       <form onSubmit={agregar} className="mb-3 flex gap-2">
         <input
           value={concepto}
@@ -211,7 +207,7 @@ function GastosSection({ gastos }: { gastos: NonNullable<ReturnType<typeof useGa
             <li key={g.id} className="flex items-center gap-3 px-2 py-3">
               <p className="min-w-0 flex-1 truncate">{g.concepto}</p>
               <p className="text-[0.9375rem] font-medium">${g.monto.toLocaleString("es-AR")}</p>
-              <button onClick={() => eliminarGasto(g.id)} aria-label="Eliminar gasto" className="tocable rounded-full p-1.5 text-texto-secundario hover:bg-terracota/10 hover:text-terracota">
+              <button onClick={() => eliminarGasto(g.id)} aria-label="Eliminar gasto" className="tocable rounded-full p-1.5 text-texto-secundario hover:bg-acento/10 hover:text-acento-texto">
                 <Trash2 size={16} />
               </button>
             </li>
@@ -232,14 +228,14 @@ function AumentosSection({ clients }: { clients: NonNullable<ReturnType<typeof u
 
   return (
     <section className="mt-8">
-      <h2 className="titulo-serif mb-1 text-[1.25rem] font-medium">Próximo aumento</h2>
+      <h2 className="titulo mb-1 text-[1.25rem] font-medium">Próximo aumento</h2>
       <p className="mb-2 text-[0.8125rem] text-texto-secundario">Toca cada 3 meses desde el último aumento.</p>
       <ul className="papel flex flex-col divide-y divide-borde/80 px-1.5">
         {filas.map(({ c, prox }) => (
           <li key={c.id} className="flex items-center gap-3 px-2 py-3">
             <div className="min-w-0 flex-1">
               <p className="truncate font-semibold">{c.nombre}</p>
-              <p className={cn("text-[0.8125rem]", prox.dias <= 0 ? "text-terracota" : prox.dias <= 30 ? "text-ambar" : "text-texto-secundario")}>
+              <p className={cn("text-[0.8125rem]", prox.dias <= 0 ? "text-acento-texto" : prox.dias <= 30 ? "text-ambar" : "text-texto-secundario")}>
                 {prox.dias < 0 ? `Atrasado ${-prox.dias} d` : prox.dias === 0 ? "Toca hoy" : `En ${prox.dias} d`} · {format(fromISODate(prox.fecha), "d MMM yyyy", { locale: es })}
               </p>
             </div>
@@ -268,7 +264,7 @@ function HistorialSection({
   if (conCobros.length === 0) return null;
   return (
     <section className="mt-8 pb-6">
-      <h2 className="titulo-serif mb-2 text-[1.25rem] font-medium">Historial por cliente</h2>
+      <h2 className="titulo mb-2 text-[1.25rem] font-medium">Historial por cliente</h2>
       <ul className="papel flex flex-col divide-y divide-borde/80 px-1.5">
         {conCobros.map((c) => (
           <li key={c.id}>
@@ -306,7 +302,7 @@ function StatCard({
 }: {
   label: string;
   valor: number;
-  tono?: "neutral" | "terracota" | "verde";
+  tono?: "neutral" | "acento" | "verde";
 }) {
   return (
     <div className="flex min-w-0 items-baseline justify-between gap-3 px-4 py-2.5 sm:block sm:py-0">
@@ -315,7 +311,7 @@ function StatCard({
         valor={valor}
         className={cn(
           "text-[1.125rem] sm:text-[1.25rem]",
-          tono === "terracota" && "text-terracota",
+          tono === "acento" && "text-acento-texto",
           tono === "verde" && "text-verde",
         )}
       />
@@ -348,7 +344,7 @@ function Monto({ valor, className }: { valor: number; className?: string }) {
   }, [valor]);
 
   return (
-    <p className={cn("titulo-serif numeros truncate font-medium leading-tight", className)}>
+    <p className={cn("titulo numeros truncate font-medium leading-tight", className)}>
       ${mostrado.toLocaleString("es-AR")}
     </p>
   );

@@ -29,7 +29,7 @@ import {
   inicioDe,
   margenDe,
   pesosPieza,
-  topePiezas,
+  topeDelDia,
 } from "./types";
 
 // ---------- public types ----------
@@ -134,6 +134,12 @@ export interface PlannerInput {
   overrides?: Record<string, number>;
   /** Extra units from other modules (Ads reviews, loose tasks, ...). */
   extras?: UnidadTrabajo[];
+  /** Units moved to a later day ("pasar a mañana"): unit id → first day it can be worked. */
+  pospuestas?: Record<string, string>;
+  /** Weight, in pieces, of what was already ticked off today. It uses up today's room, so finishing something never pulls a new task into the day. */
+  pesoHechoHoy?: number;
+  /** Units already ticked off today: they are done, so they are not planned again. */
+  unidadesHechasHoy?: string[];
   /** How many days ahead to plan. */
   horizonteDias?: number;
 }
@@ -143,9 +149,9 @@ export interface PlannerInput {
 const HORIZONTE_DEFAULT = 60;
 const EPS = 1e-9;
 /** Weight of preparing one piece's script before a recording. */
-const PESO_GUION = 0.5;
+export const PESO_GUION = 0.5;
 /** Weight of building the next month's idea calendar. */
-const PESO_CALENDARIO = 2;
+export const PESO_CALENDARIO = 2;
 /** The new calendar should start in the 2nd week of the publication period. */
 const DIA_INICIO_CALENDARIO = 7;
 /** Days before the next period the calendar must be done by (approval + recording margin). */
@@ -366,7 +372,6 @@ export function planificar(input: PlannerInput): Plan {
   const overrides = input.overrides ?? {};
   const horizonte = input.horizonteDias ?? HORIZONTE_DEFAULT;
   const todayISO = toISODate(today);
-  const tope = topePiezas(estructura);
   const trabajo = new Set(diasDeTrabajo(estructura));
   const alertas: Alerta[] = [];
 
@@ -388,7 +393,7 @@ export function planificar(input: PlannerInput): Plan {
     } else if (fecha in overrides) {
       capacidad = Math.max(overrides[fecha], 0);
     } else if (trabajo.has(d.getDay())) {
-      capacidad = tope;
+      capacidad = topeDelDia(estructura, d.getDay());
     } else {
       capacidad = 0;
       bloqueo = "libre-semana";
@@ -403,11 +408,18 @@ export function planificar(input: PlannerInput): Plan {
   }
 
   // ---- units ----
+  const pospuestas = input.pospuestas ?? {};
+  const hechasHoy = new Set(input.unidadesHechasHoy ?? []);
   const unidades = [
     ...unidadesDePiezas(input, alertas),
     ...unidadesDeCalendario(input, alertas),
     ...(input.extras ?? []),
-  ];
+  ]
+    .filter((u) => !hechasHoy.has(u.id))
+    .map((u) => {
+      const hasta = pospuestas[u.id];
+      return hasta && hasta > (u.desde ?? "") ? { ...u, desde: hasta } : u;
+    });
 
   /** Units of the same delivery spread together. */
   const grupo = (u: UnidadTrabajo) => `${u.clienteId ?? u.id}|${u.limite ?? ""}`;
@@ -490,6 +502,10 @@ export function planificar(input: PlannerInput): Plan {
           RANK[a.unidad.categoria] - RANK[b.unidad.categoria] ||
           (b.unidad.limite ?? "9999").localeCompare(a.unidad.limite ?? "9999"),
       );
+  }
+
+  if (slots[0] && slots[0].capacidad > 0 && input.pesoHechoHoy) {
+    slots[0].usadas = Math.min(input.pesoHechoHoy, slots[0].capacidad);
   }
 
   let guardia = unidades.length * 20 + 100;
@@ -741,6 +757,7 @@ export function simularCargaPiezas(
 ): { piezasMes: number; capacidadMes: number } {
   const pesos = pesosPieza(estructura);
   const piezasMes = volumen.historias * pesos.historia + volumen.posteos * pesos.posteo + volumen.reels * pesos.reel;
-  const capacidadMes = Math.round(topePiezas(estructura) * diasDeTrabajo(estructura).length * 4.3);
+  const capacidadSemana = diasDeTrabajo(estructura).reduce((suma, d) => suma + topeDelDia(estructura, d), 0);
+  const capacidadMes = Math.round(capacidadSemana * 4.3);
   return { piezasMes: Math.round(piezasMes * 10) / 10, capacidadMes };
 }

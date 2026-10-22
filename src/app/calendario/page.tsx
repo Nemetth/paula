@@ -1,5 +1,6 @@
 "use client";
 
+import { Encabezado } from "@/components/encabezado";
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { addMonths, addWeeks, endOfMonth, format, startOfMonth } from "date-fns";
@@ -80,8 +81,8 @@ export default function CalendarioPage() {
 
   return (
     <div className="mx-auto max-w-[640px] px-4 pt-2 lg:max-w-[1180px] lg:px-8 lg:pt-4">
-      <header className="entra mb-5 flex flex-wrap items-center justify-between gap-3 lg:mb-6">
-        <h1 className="titulo-serif text-[1.875rem] font-medium leading-[1.15] lg:text-[2.25rem]">Calendario</h1>
+      <Encabezado titulo="Calendario" className="!mb-3 lg:!mb-4" />
+      <div className="entra mb-5 flex justify-center lg:mb-6">
         <div role="tablist" aria-label="Vista" className="relative flex rounded-[14px] bg-bg-hundida p-1">
           <span
             aria-hidden
@@ -103,15 +104,15 @@ export default function CalendarioPage() {
             </button>
           ))}
         </div>
-      </header>
+      </div>
 
       <div className="mb-4 flex items-center justify-between">
         <button onClick={() => paso(-1)} aria-label="Anterior" className="tocable rounded-full p-1.5 text-texto-secundario hover:bg-borde/50">
           <ChevronLeft size={22} />
         </button>
         <div className="flex items-center gap-3">
-          <p key={titulo} className="titulo-serif aparece text-[1.125rem] font-medium capitalize">{titulo}</p>
-          <button onClick={() => setAncla(today)} className="tocable rounded-full bg-terracota/10 px-2.5 py-0.5 text-[0.8125rem] font-medium text-terracota hover:bg-terracota/15">
+          <p key={titulo} className="titulo aparece text-[1.125rem] font-medium capitalize">{titulo}</p>
+          <button onClick={() => setAncla(today)} className="tocable rounded-full bg-acento/10 px-2.5 py-0.5 text-[0.8125rem] font-medium text-acento-texto hover:bg-acento/15">
             Hoy
           </button>
         </div>
@@ -138,7 +139,7 @@ export default function CalendarioPage() {
           )}
 
           <section className="entra mt-6">
-            <h2 className="titulo-serif mb-2 text-[1.25rem] font-medium">Entregas de {nombreMes}</h2>
+            <h2 className="titulo mb-2 text-[1.25rem] font-medium">Entregas de {nombreMes}</h2>
             {entregasDelMes.length === 0 ? (
               <p className="text-[0.9375rem] text-texto-secundario">No hay entregas con fecha este mes.</p>
             ) : (
@@ -180,7 +181,7 @@ export default function CalendarioPage() {
 
           {especiales.length > 0 && (
             <section className="entra mt-6">
-              <h2 className="titulo-serif mb-2 text-[1.25rem] font-medium">Fechas especiales</h2>
+              <h2 className="titulo mb-2 text-[1.25rem] font-medium">Fechas especiales</h2>
               <ul className="papel flex flex-col divide-y divide-borde/80 px-1.5">
                 {especiales.map((f) => (
                   <li key={`${f.fecha}-${f.nombre}`} className="flex items-start gap-3 px-2.5 py-3 text-[0.9375rem]">
@@ -199,7 +200,7 @@ export default function CalendarioPage() {
           )}
 
           <section className="papel entra mt-6 px-4 py-3.5">
-            <h2 className="titulo-serif mb-2 text-[1.25rem] font-medium">Cierre de {nombreMes}</h2>
+            <h2 className="titulo mb-2 text-[1.25rem] font-medium">Cierre de {nombreMes}</h2>
             <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-[0.9375rem]">
               <dt className="text-texto-secundario">Entregadas o programadas</dt>
               <dd className="text-right font-medium">{cierre.entregadas}</dd>

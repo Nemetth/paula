@@ -22,6 +22,7 @@ import {
 import { toISODate } from "@/lib/domain/dates";
 import { AdsEstado } from "@/lib/domain/types";
 import { Cargando, EmptyState } from "@/components/empty-state";
+import { Encabezado } from "@/components/encabezado";
 import { cn, indice } from "@/lib/utils";
 
 export default function AdsPage() {
@@ -51,12 +52,7 @@ export default function AdsPage() {
 
   return (
     <div className="mx-auto max-w-[640px] px-4 pt-2 lg:max-w-[880px] lg:px-8 lg:pt-4">
-      <header className="entra mb-6 lg:mb-8">
-        <p className="text-[0.8125rem] font-medium text-texto-secundario mayuscula">
-          {format(today, "EEEE d 'de' MMMM", { locale: es })}
-        </p>
-        <h1 className="titulo-serif text-[1.875rem] font-medium leading-[1.15] lg:text-[2.25rem]">Ads</h1>
-      </header>
+      <Encabezado titulo="Ads" arriba={format(today, "EEEE d 'de' MMMM", { locale: es })} />
 
       {error && <p className="mb-4 text-[0.8125rem] text-[var(--color-error)]">{error}</p>}
 
@@ -84,7 +80,7 @@ export default function AdsPage() {
                     </Boton>
                     <Boton
                       activo={estado === "revisar"}
-                      tono="terracota"
+                      tono="acento"
                       onClick={() => guardar(() => guardarChequeoAds(c.id, hoyISO, "revisar" as AdsEstado))}
                     >
                       <CircleAlert size={14} /> Revisar
@@ -109,7 +105,7 @@ export default function AdsPage() {
                   <li key={c.id} className="flex items-center gap-3 px-2 py-3">
                     <div className="min-w-0 flex-1">
                       <p className="truncate font-semibold">{c.nombre}</p>
-                      <p className={cn("text-[0.8125rem]", vencida ? "text-terracota" : "text-texto-secundario")}>
+                      <p className={cn("text-[0.8125rem]", vencida ? "text-acento-texto" : "text-texto-secundario")}>
                         {dias === Infinity ? "Nunca revisada" : dias === 0 ? "Revisada hoy" : `Hace ${dias} d`}
                       </p>
                     </div>
@@ -148,7 +144,7 @@ export default function AdsPage() {
                       "tocable shrink-0 rounded-[8px] px-2.5 py-1 text-[0.8125rem] font-medium",
                       f.estado === "enviado" && "bg-verde/15 text-verde",
                       f.estado === "pendiente" && !f.atrasado && "bg-ambar/15 text-ambar",
-                      f.atrasado && "bg-terracota/15 text-terracota",
+                      f.atrasado && "bg-acento/15 text-acento-texto",
                     )}
                   >
                     {f.estado === "enviado" ? "Enviado" : f.atrasado ? "Atrasado" : "Pendiente"}
@@ -170,7 +166,7 @@ function Boton({
   children,
 }: {
   activo: boolean;
-  tono: "verde" | "terracota";
+  tono: "verde" | "acento";
   onClick: () => void;
   children: React.ReactNode;
 }) {
@@ -183,7 +179,7 @@ function Boton({
         activo
           ? tono === "verde"
             ? "pop border-verde/30 bg-verde/15 text-verde"
-            : "pop border-terracota/30 bg-terracota/15 text-terracota"
+            : "pop border-acento/30 bg-acento/15 text-acento-texto"
           : "border-borde text-texto-secundario hover:bg-borde/40",
       )}
     >

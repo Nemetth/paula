@@ -42,7 +42,7 @@ export function Sheet({
         aria-label="Cerrar"
         className="velo absolute inset-0 backdrop-blur-[2px]"
         data-cerrando={cerrando || undefined}
-        style={{ background: "color-mix(in oklab, #1b1712 38%, transparent)" }}
+        style={{ background: "color-mix(in oklab, #12151a 40%, transparent)" }}
         onClick={onClose}
       />
       <div
@@ -55,7 +55,7 @@ export function Sheet({
       >
         <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-borde lg:hidden" aria-hidden />
         <div className="mb-4 flex items-center justify-between lg:mt-3">
-          <p className="titulo-serif text-[1.25rem] font-medium">{title}</p>
+          <p className="titulo text-[1.25rem] font-medium">{title}</p>
           <button
             onClick={onClose}
             aria-label="Cerrar"
@@ -74,7 +74,7 @@ export function OpcionSheet({ children, onClick }: { children: React.ReactNode; 
   return (
     <button
       onClick={onClick}
-      className="tocable rounded-[14px] border border-borde bg-bg px-4 py-3.5 text-left text-[0.9375rem] font-medium hover:border-terracota/40"
+      className="tocable rounded-[14px] border border-borde bg-bg px-4 py-3.5 text-left text-[0.9375rem] font-medium hover:border-acento/40"
     >
       {children}
     </button>

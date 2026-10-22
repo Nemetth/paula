@@ -7,8 +7,8 @@ export default function manifest(): MetadataRoute.Manifest {
     description: "Planificación diaria, ciclos de clientes y cobros.",
     start_url: "/hoy",
     display: "standalone",
-    background_color: "#faf7f2",
-    theme_color: "#d9502d",
+    background_color: "#eceff3",
+    theme_color: "#2a2e36",
     icons: [
       { src: "/icon-192.png", sizes: "192x192", type: "image/png" },
       { src: "/icon-512.png", sizes: "512x512", type: "image/png" },

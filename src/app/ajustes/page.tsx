@@ -14,6 +14,8 @@ import {
   topePiezas,
 } from "@/lib/domain/types";
 import { TIPO_PIEZA_LABEL } from "@/lib/domain/labels";
+import { Encabezado } from "@/components/encabezado";
+import { InstalarApp } from "@/components/instalar-app";
 
 const DIAS: { valor: number; label: string }[] = [
   { valor: 1, label: "Lunes" },
@@ -25,7 +27,7 @@ const DIAS: { valor: number; label: string }[] = [
   { valor: 0, label: "Domingo" },
 ];
 
-const casilla = "h-[16px] w-[16px] accent-[var(--color-terracota)]";
+const casilla = "h-[16px] w-[16px] accent-[var(--color-oscuro)]";
 
 export default function AjustesPage() {
   const estructuraGuardada = useEstructuraSemanal();
@@ -66,6 +68,13 @@ export default function AjustesPage() {
     editar({ ...estructura, pesoPieza: { ...pesos, [tipo]: valor } });
   }
 
+  function setTopeDia(dia: number, valor: string) {
+    const topes = { ...(estructura.topesPorDia ?? {}) };
+    if (valor === "") delete topes[dia];
+    else topes[dia] = Math.max(Number(valor), 0);
+    editar({ ...estructura, topesPorDia: topes });
+  }
+
   function setFijos(next: FijoDiario[]) {
     editar({ ...estructura, fijosDiarios: next });
   }
@@ -82,6 +91,7 @@ export default function AjustesPage() {
         ...estructura,
         diasTrabajo: trabajo,
         topePiezasDia: topePiezas(estructura),
+        topesPorDia: Object.fromEntries(Object.entries(estructura.topesPorDia ?? {}).filter(([d]) => trabajo.includes(Number(d)))),
         pesoPieza: pesos,
         fijosDiarios: (estructura.fijosDiarios ?? []).filter((f) => f.nombre.trim()),
       });
@@ -93,22 +103,24 @@ export default function AjustesPage() {
 
   return (
     <div className="mx-auto max-w-[640px] px-4 pt-2 lg:max-w-[720px] lg:px-8 lg:pt-4">
-      <header className="entra mb-6 flex items-center gap-3 lg:mb-8">
-        <Link href="/hoy" aria-label="Volver" className="tocable -ml-1.5 rounded-full p-1.5 text-texto-secundario hover:bg-borde/50 lg:hidden">
-          <ArrowLeft size={20} />
-        </Link>
-        <h1 className="titulo-serif text-[1.875rem] font-medium leading-[1.15] lg:text-[2.25rem]">Ajustes</h1>
-      </header>
+      <Encabezado
+        titulo="Ajustes"
+        izquierda={
+          <Link href="/hoy" aria-label="Volver" className="tocable rounded-full p-1.5 text-texto-secundario hover:bg-borde/50 lg:hidden">
+            <ArrowLeft size={20} />
+          </Link>
+        }
+      />
 
       <form onSubmit={handleSubmit} className="entra flex flex-col gap-8 pb-10">
         <section>
-          <h2 className="mb-1 text-[0.9375rem] font-semibold">Cuánto hacés por día</h2>
+          <h2 className="mb-1 text-[0.9375rem] font-semibold">Tope general</h2>
           <p className="mb-3 text-[0.8125rem] text-texto-secundario">
-            El plan cuenta piezas, no horas. Cada día de trabajo entra hasta este tope, y cada entrega se reparte
-            parejo entre los días que tiene antes de su fecha.
+            El plan cuenta piezas, no horas. Este es el tope de los días que no tienen el suyo propio (abajo, en
+            &ldquo;Tu semana&rdquo;). Cada entrega se reparte parejo entre los días que tiene antes de su fecha.
           </p>
           <label className="papel flex items-center gap-3 px-3.5 py-3">
-            <span className="flex-1 text-[0.9375rem] font-medium">Tope de piezas por día</span>
+            <span className="flex-1 text-[0.9375rem] font-medium">Piezas por día</span>
             <input
               type="number"
               min={1}
@@ -148,27 +160,48 @@ export default function AjustesPage() {
         <section>
           <h2 className="mb-1 text-[0.9375rem] font-semibold">Tu semana</h2>
           <p className="mb-3 text-[0.8125rem] text-texto-secundario">
-            Qué días trabajás y cuáles son tus días de grabación habituales. Los días que no trabajás no reciben piezas.
+            Qué días trabajás, cuáles son tus días de grabación habituales y cuántas piezas entran cada día: un lunes,
+            un miércoles y un sábado no pesan igual. Si dejás el tope vacío, usa el general.
           </p>
           <ul className="papel flex flex-col divide-y divide-borde/80 px-1.5">
-            {DIAS.map(({ valor, label }) => (
-              <li key={valor} className="flex items-center gap-3 px-2 py-3">
-                <span className="w-24 shrink-0 text-[0.9375rem] font-medium">{label}</span>
-                <label className="flex items-center gap-2 text-[0.8125rem] text-texto-secundario">
-                  <input type="checkbox" checked={trabajo.includes(valor)} onChange={() => toggleTrabajo(valor)} className={casilla} />
-                  Trabajo
-                </label>
-                <label className="ml-auto flex items-center gap-2 text-[0.8125rem] text-texto-secundario">
-                  <input
-                    type="checkbox"
-                    checked={estructura.diasGrabacionHabituales.includes(valor)}
-                    onChange={() => toggleGrabacion(valor)}
-                    className={casilla}
-                  />
-                  Grabación
-                </label>
-              </li>
-            ))}
+            {DIAS.map(({ valor, label }) => {
+              const trabaja = trabajo.includes(valor);
+              return (
+                <li key={valor} className="flex flex-wrap items-center gap-x-3 gap-y-2 px-2 py-3">
+                  <span className="w-24 shrink-0 text-[0.9375rem] font-medium">{label}</span>
+                  <label className="flex items-center gap-2 text-[0.8125rem] text-texto-secundario">
+                    <input type="checkbox" checked={trabaja} onChange={() => toggleTrabajo(valor)} className={casilla} />
+                    Trabajo
+                  </label>
+                  <label className="flex items-center gap-2 text-[0.8125rem] text-texto-secundario">
+                    <input
+                      type="checkbox"
+                      checked={estructura.diasGrabacionHabituales.includes(valor)}
+                      onChange={() => toggleGrabacion(valor)}
+                      className={casilla}
+                    />
+                    Grabación
+                  </label>
+                  <label
+                    className={`ml-auto flex items-center gap-2 text-[0.8125rem] text-texto-secundario transition-opacity ${trabaja ? "" : "pointer-events-none opacity-40"}`}
+                  >
+                    Piezas
+                    <input
+                      type="number"
+                      min={0}
+                      max={50}
+                      step={0.5}
+                      value={estructura.topesPorDia?.[valor] ?? ""}
+                      placeholder={String(topePiezas(estructura))}
+                      disabled={!trabaja}
+                      onChange={(ev) => setTopeDia(valor, ev.target.value)}
+                      className="input w-20 py-1.5"
+                      aria-label={`Tope de piezas del ${label.toLowerCase()}`}
+                    />
+                  </label>
+                </li>
+              );
+            })}
           </ul>
         </section>
 
@@ -204,11 +237,13 @@ export default function AjustesPage() {
           <button
             type="button"
             onClick={agregarFijo}
-            className="tocable rounded-[12px] border border-dashed border-borde px-4 py-2.5 text-[0.9375rem] font-medium hover:border-terracota/50 hover:text-terracota"
+            className="tocable rounded-[12px] border border-dashed border-borde px-4 py-2.5 text-[0.9375rem] font-medium hover:border-acento/50 hover:text-acento-texto"
           >
             Agregar fijo
           </button>
         </section>
+
+        <InstalarApp />
 
         <button
           type="submit"

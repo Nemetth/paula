@@ -25,7 +25,7 @@ export function BottomNav() {
         {activo >= 0 && (
           <span
             aria-hidden
-            className="absolute bottom-1.5 top-1.5 rounded-[16px] bg-terracota/[0.11] transition-transform duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]"
+            className="absolute bottom-1.5 top-1.5 rounded-[16px] bg-acento/[0.11] transition-transform duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]"
             style={{
               left: 6,
               width: `calc((100% - 12px) / ${NAV_ITEMS.length})`,
@@ -48,11 +48,11 @@ export function BottomNav() {
                   key={active ? "on" : "off"}
                   size={22}
                   strokeWidth={active ? 2.25 : 1.75}
-                  className={cn(active ? "pop text-terracota" : "text-texto-secundario")}
+                  className={cn(active ? "pop text-acento-texto" : "text-texto-secundario")}
                 />
                 {showVencidos && (
                   <span
-                    className="absolute -right-2.5 -top-1.5 flex h-[16px] min-w-[16px] items-center justify-center rounded-[8px] bg-terracota px-1 text-[0.6875rem] font-medium leading-none text-bg ring-2 ring-bg-elevada"
+                    className="absolute -right-2.5 -top-1.5 flex h-[16px] min-w-[16px] items-center justify-center rounded-[8px] bg-acento px-1 text-[0.6875rem] font-medium leading-none text-sobre-acento ring-2 ring-bg-elevada"
                     aria-label={`${vencidos} cobros vencidos`}
                   >
                     {vencidos}
@@ -62,7 +62,7 @@ export function BottomNav() {
               <span
                 className={cn(
                   "text-[0.75rem] font-medium transition-colors",
-                  active ? "text-terracota" : "text-texto-secundario",
+                  active ? "text-acento-texto" : "text-texto-secundario",
                 )}
               >
                 {label}

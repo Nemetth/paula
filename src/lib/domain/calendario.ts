@@ -42,7 +42,7 @@ export function diasDeLaSemana(ancla: Date): Date[] {
 }
 
 /** Stable colour per client so it reads the same in every view. */
-/** Earthy, warm-leaning hues that sit with terracota/hueso and stay legible
+/** Earthy, warm-leaning hues that sit with acento/hueso and stay legible
  * as dots, monograms and day-strip segments in both themes. */
 const PALETA_CLIENTES = [
   "#C8623E", // arcilla

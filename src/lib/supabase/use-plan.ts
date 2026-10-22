@@ -4,9 +4,9 @@
 // and the alerts bell all read exactly the same derived facts.
 
 import { useMemo } from "react";
-import { unidadesAdsFondo } from "@/lib/domain/ads";
+import { PESO_REVISION_FONDO, unidadesAdsFondo } from "@/lib/domain/ads";
 import { Entrega, calcularEntregas } from "@/lib/domain/entregas";
-import { Plan, planificar } from "@/lib/domain/planner";
+import { PESO_CALENDARIO, PESO_GUION, Plan, planificar } from "@/lib/domain/planner";
 import { toISODate } from "@/lib/domain/dates";
 import { unidadesDeTareas } from "@/lib/domain/tareas";
 import {
@@ -18,8 +18,10 @@ import {
   Grabacion,
   Pieza,
   Tarea,
+  pesosPieza,
 } from "@/lib/domain/types";
 import {
+  TareaHecha,
   useAdsReportes,
   useBlockedDates,
   useClients,
@@ -28,7 +30,9 @@ import {
   useEstructuraSemanal,
   useGrabaciones,
   usePiezas,
+  usePospuestas,
   useTareas,
+  useTareasHechas,
 } from "./data";
 
 export interface PlanContext {
@@ -58,6 +62,8 @@ export function usePlan(horizonteDias?: number): PlanContext | null {
   const cobros = useCobros();
   const reportes = useAdsReportes();
   const tareas = useTareas();
+  const pospuestas = usePospuestas();
+  const hechasHoy = useTareasHechas(todayISO);
   const dayOverrideHoras = useDayOverride(todayISO);
   const estructuraGuardada = useEstructuraSemanal();
 
@@ -74,6 +80,9 @@ export function usePlan(horizonteDias?: number): PlanContext | null {
       blockedDates,
       estructura,
       extras: [...unidadesAdsFondo(clients, today), ...unidadesDeTareas(lista, clients, today)],
+      pospuestas,
+      unidadesHechasHoy: (hechasHoy ?? []).map((h) => h.unidadId),
+      pesoHechoHoy: pesoHecho(hechasHoy ?? [], piezas, estructura),
       overrides: dayOverrideHoras != null ? { [todayISO]: dayOverrideHoras } : undefined,
       horizonteDias,
     });
@@ -90,5 +99,20 @@ export function usePlan(horizonteDias?: number): PlanContext | null {
       tareas: lista,
       estructura,
     };
-  }, [clients, piezas, grabaciones, blockedDates, cobros, reportes, tareas, estructura, dayOverrideHoras, today, todayISO, horizonteDias]);
+  }, [clients, piezas, grabaciones, blockedDates, cobros, reportes, tareas, estructura, pospuestas, hechasHoy, dayOverrideHoras, today, todayISO, horizonteDias]);
+}
+
+/** What ticking these off weighed, in pieces, so today's room can be reduced by it. */
+function pesoHecho(hechas: TareaHecha[], piezas: Pieza[], estructura: EstructuraSemanal): number {
+  const pesos = pesosPieza(estructura);
+  return hechas.reduce((suma, h) => {
+    if (h.tipo === "edicion") {
+      const pieza = piezas.find((p) => p.id === h.unidadId.split(":")[0]);
+      return suma + (pieza ? pesos[pieza.tipo] : 1);
+    }
+    if (h.tipo === "guion") return suma + PESO_GUION;
+    if (h.tipo === "ideas") return suma + PESO_CALENDARIO;
+    if (h.tipo === "ads-fondo") return suma + PESO_REVISION_FONDO;
+    return suma + 1;
+  }, 0);
 }

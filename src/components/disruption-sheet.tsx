@@ -78,7 +78,7 @@ export function DisruptionSheet({
           <span className="pop mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-verde/12 text-verde">
             <RefreshCw size={24} strokeWidth={2} className="reacomoda" />
           </span>
-          <p className="titulo-serif text-[1.25rem] font-medium">Plan reacomodado</p>
+          <p className="titulo text-[1.25rem] font-medium">Plan reacomodado</p>
           <p className="entra mt-1 mb-5 max-w-[34ch] text-[0.9375rem] text-texto-secundario" style={{ "--i": 3 } as React.CSSProperties}>
             {confirmado}
           </p>

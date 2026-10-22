@@ -176,8 +176,10 @@ export interface EstructuraSemanal {
   tiemposPieza?: TiemposPieza;
   /** Weekdays Paula works. When absent, the weekdays with hours > 0 in horasPorDia. */
   diasTrabajo?: number[];
-  /** How much work fits in one day, counted in pieces (weighted by pesoPieza). */
+  /** How much work fits in one day, counted in pieces (weighted by pesoPieza). Fallback for days with no tope of their own. */
   topePiezasDia?: number;
+  /** Tope of each weekday on its own (0 = Sunday .. 6 = Saturday): Mondays, Wednesdays and Saturdays are not the same. */
+  topesPorDia?: Record<number, number>;
   /** How many "pieces" each type counts as (e.g. a reel = 2 historias). */
   pesoPieza?: Record<PieceType, number>;
 }
@@ -195,6 +197,11 @@ export function diasDeTrabajo(e: EstructuraSemanal): number[] {
 
 export function topePiezas(e: EstructuraSemanal): number {
   return e.topePiezasDia ?? DEFAULT_TOPE_PIEZAS_DIA;
+}
+
+/** Tope of one weekday: its own if set, else the general one. */
+export function topeDelDia(e: EstructuraSemanal, diaSemana: number): number {
+  return e.topesPorDia?.[diaSemana] ?? topePiezas(e);
 }
 
 export function pesosPieza(e: EstructuraSemanal): Record<PieceType, number> {

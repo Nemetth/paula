@@ -61,9 +61,9 @@ export function VistaMes({
               className={cn(
                 "tocable flex min-h-[76px] min-w-0 flex-col items-stretch gap-0.5 rounded-[12px] border px-0.5 py-1 lg:min-h-[108px] lg:px-1",
                 seleccionado === iso
-                  ? "border-terracota/70 bg-bg-elevada shadow-papel-alto"
+                  ? "border-acento/70 bg-bg-elevada shadow-papel-alto"
                   : "border-transparent hover:border-borde",
-                seleccionado !== iso && (sobrecargado ? "bg-terracota/15" : "bg-bg-elevada/70 hover:bg-bg-elevada"),
+                seleccionado !== iso && (sobrecargado ? "bg-acento/15" : "bg-bg-elevada/70 hover:bg-bg-elevada"),
                 fuera && "opacity-40",
               )}
             >
@@ -71,7 +71,7 @@ export function VistaMes({
                 <span
                   className={cn(
                     "numeros flex h-6 min-w-6 items-center justify-center rounded-full px-1 text-[0.8125rem] font-medium",
-                    iso === hoyISO ? "bg-terracota text-bg shadow-boton" : "text-texto",
+                    iso === hoyISO ? "bg-acento text-sobre-acento shadow-boton" : "text-texto",
                   )}
                 >
                   {d.getDate()}

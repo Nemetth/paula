@@ -32,11 +32,11 @@ export function SeccionAds({ cliente, chequeos, hoyISO }: { cliente: Client; che
         <dt className="text-texto-secundario">Chequeo de hoy</dt>
         <dd className="text-right font-medium">{hoy ? (hoy.estado === "ok" ? "OK" : "Revisar") : "Sin chequear"}</dd>
         <dt className="text-texto-secundario">Revisión a fondo</dt>
-        <dd className={cn("text-right font-medium", dias >= CADENCIA_REVISION_FONDO_DIAS && "text-terracota")}>
+        <dd className={cn("text-right font-medium", dias >= CADENCIA_REVISION_FONDO_DIAS && "text-acento-texto")}>
           {dias === Infinity ? "Nunca" : dias === 0 ? "Hoy" : `Hace ${dias} d`}
         </dd>
       </dl>
-      <Link href="/ads" className="mt-2 inline-block text-[0.8125rem] font-medium text-terracota">
+      <Link href="/ads" className="mt-2 inline-block text-[0.8125rem] font-medium text-acento-texto">
         Ir a Ads
       </Link>
     </Seccion>
@@ -84,7 +84,7 @@ export function SeccionIdeas({ cliente, ideas }: { cliente: Client; ideas: Idea[
                 checked={i.usada}
                 onChange={(e) => marcarIdeaUsada(i.id, e.target.checked)}
                 aria-label="Idea usada"
-                className="h-[16px] w-[16px] accent-[var(--color-terracota)]"
+                className="h-[16px] w-[16px] accent-[var(--color-oscuro)]"
               />
               <p className={cn("min-w-0 flex-1", i.usada && "text-texto-secundario line-through")}>{i.texto}</p>
               <button onClick={() => eliminarIdea(i.id)} aria-label="Eliminar idea" className="text-texto-secundario">

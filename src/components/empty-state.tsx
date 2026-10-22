@@ -21,7 +21,7 @@ export function Sol({ size = 72 }: { size?: number }) {
         ))}
       </g>
       <g className="late">
-        <circle cx="36" cy="36" r="15" fill="color-mix(in oklab, var(--color-ambar) 35%, var(--color-terracota))" />
+        <circle cx="36" cy="36" r="15" fill="color-mix(in oklab, var(--color-ambar) 35%, var(--color-acento))" />
         <circle cx="31" cy="31" r="5" fill="#fff" opacity="0.28" />
       </g>
     </svg>
@@ -45,7 +45,7 @@ export function EmptyState({
           <Sol />
         </div>
       )}
-      <p className="titulo-serif text-[1.25rem] font-medium">{title}</p>
+      <p className="titulo text-[1.25rem] font-medium">{title}</p>
       <p className="mt-1 max-w-[38ch] text-[0.9375rem] text-texto-secundario">{detail}</p>
     </div>
   );

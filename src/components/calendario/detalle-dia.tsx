@@ -27,7 +27,7 @@ export function DetalleDia({
   return (
     <section key={info.fecha} className="papel entra mt-5 px-4 py-3.5">
       <header className="mb-2 flex items-baseline justify-between">
-        <h2 className="titulo-serif text-[1.125rem] font-medium capitalize">
+        <h2 className="titulo text-[1.125rem] font-medium capitalize">
           {format(fromISODate(info.fecha), "EEEE d 'de' MMMM", { locale: es })}
         </h2>
         {info.carga && info.carga.capacidad > 0 && (

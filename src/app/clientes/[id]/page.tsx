@@ -29,6 +29,7 @@ import { EntregaActual } from "@/components/ficha/entrega-actual";
 import { ESTADO_CLIENTE_LABEL, TIPO_CLIENTE_LABEL } from "@/lib/domain/labels";
 import { ClienteEstado } from "@/lib/domain/types";
 import { Cargando } from "@/components/empty-state";
+import { Encabezado } from "@/components/encabezado";
 
 export default function ClienteDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -56,12 +57,14 @@ export default function ClienteDetailPage() {
   if (editando) {
     return (
       <div className="mx-auto max-w-[640px] px-4 pt-2 lg:max-w-[720px] lg:px-8 lg:pt-4">
-        <header className="entra mb-6 flex items-center gap-3 lg:mb-8">
-          <button onClick={() => setEditando(false)} aria-label="Volver" className="tocable -ml-1.5 rounded-full p-1.5 text-texto-secundario hover:bg-borde/50">
-            <ArrowLeft size={20} />
-          </button>
-          <h1 className="titulo-serif text-[1.875rem] font-medium leading-[1.15] lg:text-[2.25rem]">Editar {cliente.nombre}</h1>
-        </header>
+        <Encabezado
+          titulo={`Editar ${cliente.nombre}`}
+          izquierda={
+            <button onClick={() => setEditando(false)} aria-label="Volver" className="tocable rounded-full p-1.5 text-texto-secundario hover:bg-borde/50">
+              <ArrowLeft size={20} />
+            </button>
+          }
+        />
         <div className="lg:rounded-[20px] lg:border lg:border-borde lg:bg-bg-elevada lg:p-8 lg:shadow-papel">
           <ClienteForm
             initial={cliente}
@@ -78,11 +81,15 @@ export default function ClienteDetailPage() {
 
   return (
     <div className="mx-auto max-w-[640px] px-4 pt-2 lg:max-w-[720px] lg:px-8 lg:pt-4">
-      <header className="entra mb-6 flex items-center gap-3 lg:mb-8">
-        <Link href="/clientes" aria-label="Volver" className="tocable -ml-1.5 rounded-full p-1.5 text-texto-secundario hover:bg-borde/50">
-          <ArrowLeft size={20} />
-        </Link>
-        <h1 className="flex-1 truncate titulo-serif text-[1.875rem] font-medium leading-[1.15] lg:text-[2.25rem]">{cliente.nombre}</h1>
+      <Encabezado
+        titulo={cliente.nombre}
+        izquierda={
+          <Link href="/clientes" aria-label="Volver" className="tocable rounded-full p-1.5 text-texto-secundario hover:bg-borde/50">
+            <ArrowLeft size={20} />
+          </Link>
+        }
+        derecha={
+          <div className="flex items-center">
         <button onClick={() => setEditando(true)} aria-label="Editar" className="tocable rounded-full p-2 text-texto-secundario hover:bg-borde/50">
           <Pencil size={19} />
         </button>
@@ -99,14 +106,16 @@ export default function ClienteDetailPage() {
             }
           }}
           aria-label="Eliminar"
-          className="tocable rounded-full p-2 text-texto-secundario hover:bg-terracota/10 hover:text-terracota"
+          className="tocable rounded-full p-2 text-texto-secundario hover:bg-acento/10 hover:text-acento-texto"
         >
           <Trash2 size={19} />
         </button>
-      </header>
+          </div>
+        }
+      />
 
       <div className="entra" style={{ "--i": 1 } as React.CSSProperties}>
-        <div className="mb-8 flex flex-wrap items-center gap-2">
+        <div className="mb-8 flex flex-wrap items-center justify-center gap-2">
           <select
             value={cliente.estado}
             onChange={(e) => actualizarCliente(cliente.id, { estado: e.target.value as ClienteEstado })}

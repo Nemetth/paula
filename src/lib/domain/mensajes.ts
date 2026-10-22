@@ -4,14 +4,23 @@ import { differenceInCalendarDays, format } from "date-fns";
 import { es } from "date-fns/locale";
 import { fromISODate, toISODate } from "./dates";
 import { estadoCobro } from "./cobros";
+import { Plan } from "./planner";
 import { Client, Cobro, Grabacion, Pieza } from "./types";
 
-export type TipoMensaje = "pedir-material" | "avisar-grabacion" | "recordar-aprobacion" | "recordar-pago";
+export type TipoMensaje =
+  | "pedir-material"
+  | "avisar-grabacion"
+  | "recordar-aprobacion"
+  | "recordar-pago"
+  | "correr-entrega";
 
 export interface MensajeContexto {
   cliente: Client;
   /** ISO date of the recording, for "avisar-grabacion". */
   fechaGrabacion?: string;
+  /** For "correr-entrega": the delivery as agreed, and the date it can really be done by. */
+  fechaEntrega?: string;
+  fechaNueva?: string;
 }
 
 export const MENSAJES: { tipo: TipoMensaje; titulo: string }[] = [
@@ -19,9 +28,13 @@ export const MENSAJES: { tipo: TipoMensaje; titulo: string }[] = [
   { tipo: "avisar-grabacion", titulo: "Avisar la grabación" },
   { tipo: "recordar-aprobacion", titulo: "Recordar la aprobación" },
   { tipo: "recordar-pago", titulo: "Recordar el pago" },
+  { tipo: "correr-entrega", titulo: "Correr la entrega" },
 ];
 
-export function textoMensaje(tipo: TipoMensaje, { cliente, fechaGrabacion }: MensajeContexto): string {
+export function textoMensaje(
+  tipo: TipoMensaje,
+  { cliente, fechaGrabacion, fechaEntrega, fechaNueva }: MensajeContexto,
+): string {
   const saludo = `Hola ${cliente.nombre.replace(/^\[Demo\]\s*/, "")}!`;
   switch (tipo) {
     case "pedir-material":
@@ -36,6 +49,12 @@ export function textoMensaje(tipo: TipoMensaje, { cliente, fechaGrabacion }: Men
       return `${saludo} Te recuerdo que estoy esperando tu aprobación para poder seguir con la producción. Apenas la tengas me avisás!`;
     case "recordar-pago":
       return `${saludo} Te escribo para recordarte el pago de este mes. Si ya lo hiciste, ignorá este mensaje. Gracias!`;
+    case "correr-entrega": {
+      const dia = (iso?: string) => (iso ? format(fromISODate(iso), "EEEE d 'de' MMMM", { locale: es }) : "");
+      const original = fechaEntrega ? ` del ${dia(fechaEntrega)}` : "";
+      const nueva = fechaNueva ? `para el ${dia(fechaNueva)}` : "unos días más tarde";
+      return `${saludo} Se me juntó trabajo y la entrega${original} te la voy a poder dejar lista ${nueva}. ¿Te parece bien? Gracias por la paciencia!`;
+    }
   }
 }
 
@@ -74,8 +93,10 @@ export function mensajesPendientes(input: {
   grabaciones: Grabacion[];
   cobros: Cobro[];
   hechos: Set<string>;
+  /** When given, adds the "correr la entrega" suggestions for work that can't make its date. */
+  plan?: Plan;
 }): MensajePendiente[] {
-  const { today, clients, piezas, grabaciones, cobros, hechos } = input;
+  const { today, clients, piezas, grabaciones, cobros, hechos, plan } = input;
   const out: MensajePendiente[] = [];
   const activos = clients.filter((c) => c.activo && c.estado !== "en-pausa");
 
@@ -123,5 +144,46 @@ export function mensajesPendientes(input: {
     if (cliente && estadoCobro(cobro, today) === "vencido") agregar("recordar-pago", cliente, cobro.periodo);
   }
 
+  if (plan) {
+    for (const c of corrimientosSugeridos(plan, activos)) {
+      agregar("correr-entrega", c.cliente, `${c.fechaEntrega}@${c.fechaNueva}`, {
+        fechaEntrega: c.fechaEntrega,
+        fechaNueva: c.fechaNueva,
+      });
+    }
+  }
+
   return out;
+}
+
+export interface CorrimientoSugerido {
+  cliente: Client;
+  /** The delivery date that no longer holds. */
+  fechaEntrega: string;
+  /** When the plan can actually finish it. */
+  fechaNueva: string;
+  /** How many tasks of that delivery miss its date. */
+  tareas: number;
+}
+
+/** Deliveries the plan cannot make: late work the planner could only fit after
+ * the date. Most pressing delivery first. These are the cases where the right
+ * move is to tell the client, not to work harder. */
+export function corrimientosSugeridos(plan: Plan, clientes: Client[]): CorrimientoSugerido[] {
+  const porId = new Map(clientes.map((c) => [c.id, c]));
+  const grupos = new Map<string, CorrimientoSugerido>();
+  for (const a of plan.asignaciones) {
+    const { clienteId, limite, tipo } = a.unidad;
+    const cliente = clienteId ? porId.get(clienteId) : undefined;
+    if (!a.atrasada || !cliente || !limite || tipo !== "edicion") continue;
+    if (a.fecha <= limite) continue;
+    const key = `${cliente.id}|${limite}`;
+    const cur = grupos.get(key) ?? { cliente, fechaEntrega: limite, fechaNueva: a.fecha, tareas: 0 };
+    cur.tareas += 1;
+    if (a.fecha > cur.fechaNueva) cur.fechaNueva = a.fecha;
+    grupos.set(key, cur);
+  }
+  return [...grupos.values()].sort(
+    (a, b) => a.fechaEntrega.localeCompare(b.fechaEntrega) || a.cliente.nombre.localeCompare(b.cliente.nombre),
+  );
 }
