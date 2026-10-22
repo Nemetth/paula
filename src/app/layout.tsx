@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Outfit } from "next/font/google";
 import "./globals.css";
 import { AppFrame } from "@/components/app-frame";
+import { Luz } from "@/components/luz";
 import { ServiceWorkerRegister } from "@/components/service-worker-register";
 
 /** One typeface for everything, no serif. */
@@ -11,7 +12,7 @@ const outfit = Outfit({
 });
 
 export const metadata: Metadata = {
-  title: "Paula — plan del día",
+  title: { default: "Paula — plan del día", template: "%s · Paula" },
   description: "Planificación diaria, ciclos de clientes y cobros.",
   appleWebApp: {
     capable: true,
@@ -31,7 +32,8 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="es" className={`${outfit.variable} h-full antialiased`}>
       <body className="min-h-full flex flex-col bg-bg text-texto">
-        <div className="luz" aria-hidden />
+        <div className="trama" aria-hidden />
+        <Luz />
         <ServiceWorkerRegister />
         <AppFrame>{children}</AppFrame>
       </body>

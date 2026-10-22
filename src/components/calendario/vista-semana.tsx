@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { DiaCalendario, colorCliente, diasDeLaSemana } from "@/lib/domain/calendario";
@@ -8,6 +8,7 @@ import { toISODate } from "@/lib/domain/dates";
 import { fmtPiezas } from "@/lib/domain/planner";
 import { Client } from "@/lib/domain/types";
 import { IconoHito } from "@/components/entrega";
+import { BotonPrimario, Sheet } from "@/components/sheet";
 import { cn } from "@/lib/utils";
 
 const SEMAFORO: Record<string, string> = {
@@ -32,11 +33,25 @@ export function VistaSemana({
   onMover: (piezaId: string, fecha: string) => void;
 }) {
   const [sobre, setSobre] = useState<string | null>(null);
+  // Dragging only exists with a mouse: tapping a task opens this to pick its day instead.
+  const [moviendo, setMoviendo] = useState<{ piezaId: string; titulo: string; fecha: string } | null>(null);
   const semana = diasDeLaSemana(ancla);
+  const desplazable = useRef<HTMLDivElement>(null);
+  const inicioSemana = toISODate(semana[0]);
+
+  // The week is wider than a phone: start on today's column instead of Monday's.
+  useEffect(() => {
+    const caja = desplazable.current;
+    const hoy = caja?.querySelector<HTMLElement>(`[data-dia="${hoyISO}"]`);
+    if (!caja) return;
+    caja.scrollLeft = hoy
+      ? Math.max(hoy.getBoundingClientRect().left - caja.getBoundingClientRect().left + caja.scrollLeft - 16, 0)
+      : 0;
+  }, [inicioSemana, hoyISO]);
 
   return (
     <div>
-      <div className="-mx-4 overflow-x-auto px-4 pb-2 lg:mx-0 lg:overflow-visible lg:px-0">
+      <div ref={desplazable} className="-mx-4 overflow-x-auto px-4 pb-2 lg:mx-0 lg:overflow-visible lg:px-0">
         <div key={toISODate(semana[0])} className="aparece grid min-w-[1120px] grid-cols-7 gap-2 lg:min-w-0">
           {semana.map((d) => {
             const iso = toISODate(d);
@@ -45,6 +60,7 @@ export function VistaSemana({
             return (
               <section
                 key={iso}
+                data-dia={iso}
                 onDragOver={(e) => {
                   e.preventDefault();
                   setSobre(iso);
@@ -105,19 +121,37 @@ export function VistaSemana({
                           t.atrasada && "bg-acento/10",
                         )}
                       >
-                        <p className="flex items-center gap-1.5">
-                          <span
-                            className="h-2 w-2 shrink-0 rounded-full"
-                            style={{ background: colorCliente(clients, t.unidad.clienteId) }}
-                          />
-                          <span className="truncate font-medium">
-                            {clients.find((c) => c.id === t.unidad.clienteId)?.nombre ?? "Tarea"}
-                          </span>
-                        </p>
-                        <p className="truncate text-texto-secundario">
-                          {t.unidad.etiqueta}
-                          {t.unidad.provisoria && " · provisoria"}
-                        </p>
+                        {(() => {
+                          const cliente = clients.find((c) => c.id === t.unidad.clienteId)?.nombre ?? "Tarea";
+                          const contenido = (
+                            <>
+                              <span className="flex items-center gap-1.5">
+                                <span
+                                  className="h-2 w-2 shrink-0 rounded-full"
+                                  style={{ background: colorCliente(clients, t.unidad.clienteId) }}
+                                />
+                                <span className="truncate font-medium">{cliente}</span>
+                              </span>
+                              <span className="block truncate text-texto-secundario">
+                                {t.unidad.etiqueta}
+                                {t.unidad.provisoria && " · provisoria"}
+                              </span>
+                            </>
+                          );
+                          return t.unidad.piezaId ? (
+                            <button
+                              onClick={() =>
+                                setMoviendo({ piezaId: t.unidad.piezaId!, titulo: `${cliente} · ${t.unidad.etiqueta}`, fecha: iso })
+                              }
+                              aria-label={`Mover ${cliente}, ${t.unidad.etiqueta}, a otro día`}
+                              className="tocable block w-full min-w-0 text-left"
+                            >
+                              {contenido}
+                            </button>
+                          ) : (
+                            <div>{contenido}</div>
+                          );
+                        })()}
                       </li>
                     );
                   })}
@@ -128,8 +162,40 @@ export function VistaSemana({
         </div>
       </div>
       <p className="mt-2 text-[0.8125rem] text-texto-secundario">
-        Arrastrá una tarea a otro día para que no arranque antes de esa fecha. Cada entrega se reparte parejo hasta su fecha objetivo.
+        <span className="lg:hidden">Tocá una tarea para elegir otro día. </span>
+        <span className="hidden lg:inline">
+          Arrastrá una tarea a otro día (o tocala) para que no arranque antes de esa fecha.{" "}
+        </span>
+        Cada entrega se reparte parejo hasta su fecha objetivo.
       </p>
+
+      <Sheet open={moviendo !== null} title="Mover tarea" onClose={() => setMoviendo(null)}>
+        {moviendo && (
+          <div className="flex flex-col gap-3">
+            <p className="text-[0.9375rem] font-medium">{moviendo.titulo}</p>
+            <label className="flex flex-col gap-1">
+              <span className="text-[0.8125rem] font-medium text-texto-secundario">No arrancar antes del</span>
+              <input
+                type="date"
+                value={moviendo.fecha}
+                min={hoyISO}
+                onChange={(e) => setMoviendo({ ...moviendo, fecha: e.target.value })}
+                className="input"
+              />
+            </label>
+            <p className="text-[0.8125rem] text-texto-secundario">El resto del plan se acomoda solo.</p>
+            <BotonPrimario
+              disabled={moviendo.fecha < hoyISO}
+              onClick={() => {
+                onMover(moviendo.piezaId, moviendo.fecha);
+                setMoviendo(null);
+              }}
+            >
+              Mover
+            </BotonPrimario>
+          </div>
+        )}
+      </Sheet>
     </div>
   );
 }

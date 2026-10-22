@@ -4,7 +4,8 @@ import { useState } from "react";
 import Link from "next/link";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
-import { MessageCircle, Trash2 } from "lucide-react";
+import { MessageCircle } from "lucide-react";
+import { BotonEliminar } from "@/components/boton-eliminar";
 import {
   actualizarCliente,
   crearIdea,
@@ -87,9 +88,7 @@ export function SeccionIdeas({ cliente, ideas }: { cliente: Client; ideas: Idea[
                 className="h-[16px] w-[16px] accent-[var(--color-oscuro)]"
               />
               <p className={cn("min-w-0 flex-1", i.usada && "text-texto-secundario line-through")}>{i.texto}</p>
-              <button onClick={() => eliminarIdea(i.id)} aria-label="Eliminar idea" className="text-texto-secundario">
-                <Trash2 size={16} />
-              </button>
+              <BotonEliminar etiqueta="idea" onConfirmar={() => void eliminarIdea(i.id).catch(console.error)} />
             </li>
           ))}
         </ul>

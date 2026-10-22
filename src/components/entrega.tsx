@@ -1,6 +1,5 @@
-import { format } from "date-fns";
 import { Check, PackageCheck, Presentation, Video } from "lucide-react";
-import { fromISODate } from "@/lib/domain/dates";
+import { fechaCorta } from "@/lib/domain/dates";
 import { AvanceTipo, Entrega, ORDEN_TIPOS, SemaforoEntrega } from "@/lib/domain/entregas";
 import { TIPO_PIEZA_LABEL } from "@/lib/domain/labels";
 import { Hito } from "@/lib/domain/planner";
@@ -13,7 +12,8 @@ export const SEMAFORO_ENTREGA: Record<SemaforoEntrega, { label: string; punto: s
   lista: { label: "Lista", punto: "bg-verde", texto: "text-verde" },
 };
 
-export const fechaDM = (iso: string) => format(fromISODate(iso), "d/M");
+/** Same short date as everywhere else ("11 oct"), not "11/10". */
+export const fechaDM = fechaCorta;
 
 export function SemaforoPunto({ semaforo, className }: { semaforo: SemaforoEntrega; className?: string }) {
   const s = SEMAFORO_ENTREGA[semaforo];

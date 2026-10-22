@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { ChevronDown, Trash2 } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ChevronDown } from "lucide-react";
 import { endOfMonth, format } from "date-fns";
 import { es } from "date-fns/locale";
 import {
@@ -17,6 +17,8 @@ import { balanceDelMes, proximoAumento } from "@/lib/domain/plata";
 import { CobroEstado } from "@/lib/domain/types";
 import { estadoCobro } from "@/lib/domain/cobros";
 import { fechaCorta, fromISODate, nombreMes, toISODate } from "@/lib/domain/dates";
+import { AvisoDeshacer, AvisoDeshacerToast } from "@/components/aviso-deshacer";
+import { BotonEliminar } from "@/components/boton-eliminar";
 import { EmptyState } from "@/components/empty-state";
 import { Encabezado } from "@/components/encabezado";
 import { cn, indice } from "@/lib/utils";
@@ -37,6 +39,29 @@ export default function PlataPage() {
   const cobrosTodos = useCobros();
   const gastos = useGastos();
   const cobros = useMemo(() => cobrosTodos?.filter((c) => c.periodo === periodo), [cobrosTodos, periodo]);
+  const [errorCobro, setErrorCobro] = useState<string | null>(null);
+  const [aviso, setAviso] = useState<AvisoDeshacer | null>(null);
+  const avisoId = useRef(0);
+  const cerrarAviso = useCallback(() => setAviso(null), []);
+
+  /** One tap flips a cobro between cobrado and not, so every flip can be taken back. */
+  function alternarCobro(clienteId: string, nombre: string, estadoGuardado: CobroEstado, estabaPagado: boolean) {
+    setErrorCobro(null);
+    const falla = (err: unknown) => setErrorCobro(err instanceof Error ? err.message : "No se pudo guardar el cobro.");
+    crearOActualizarCobro(clienteId, periodo, {
+      estado: estabaPagado ? "pendiente" : "pagado",
+      fechaPago: estabaPagado ? undefined : toISODate(new Date()),
+    })
+      .then(() => {
+        avisoId.current += 1;
+        setAviso({
+          id: avisoId.current,
+          texto: estabaPagado ? `${nombre}: marcado como no cobrado` : `${nombre}: cobrado`,
+          deshacer: () => void crearOActualizarCobro(clienteId, periodo, { estado: estadoGuardado }).catch(falla),
+        });
+      })
+      .catch(falla);
+  }
 
   // Make sure every active client has a cobro row for the current period.
   useEffect(() => {
@@ -71,6 +96,7 @@ export default function PlataPage() {
   const totalPendiente = filas
     .filter((f) => f.estado !== "pagado")
     .reduce((sum, f) => sum + (f.cobro.monto ?? 0), 0);
+  const sinMonto = filas.some((f) => f.estado !== "pagado" && !f.cobro.monto);
   const vencidas = filas.filter((f) => f.estado === "vencido");
   const totalVencido = vencidas.reduce((sum, f) => sum + (f.cobro.monto ?? 0), 0);
 
@@ -90,9 +116,20 @@ export default function PlataPage() {
           ) : (
             <p className="text-[0.8125rem] text-texto-secundario">Nada vencido</p>
           )}
+          {sinMonto && (
+            <p className="mt-1 text-[0.8125rem] text-texto-secundario">
+              Hay cobros sin monto: cargalo en la ficha de cada cliente y el total se suma acá.
+            </p>
+          )}
         </div>
         <BalanceCard cobros={cobrosTodos ?? []} gastos={gastos ?? []} periodo={periodo} />
       </div>
+
+      {errorCobro && (
+        <p role="alert" className="mb-3 text-center text-[0.8125rem] text-[var(--color-error)]">
+          {errorCobro}
+        </p>
+      )}
 
       {filas.length === 0 ? (
         <EmptyState title="Nada para cobrar todavía" detail="Los cobros del mes aparecen acá una vez que tengas clientes activos." />
@@ -108,14 +145,10 @@ export default function PlataPage() {
                 </p>
               </div>
               <button
-                onClick={() =>
-                  crearOActualizarCobro(cliente!.id, periodo, {
-                    estado: estado === "pagado" ? "pendiente" : "pagado",
-                    fechaPago: estado === "pagado" ? undefined : toISODate(new Date()),
-                  })
-                }
+                onClick={() => alternarCobro(cliente!.id, cliente!.nombre, cobro.estado, estado === "pagado")}
+                aria-label={`${cliente!.nombre}: ${ESTADO_LABEL[estado]}. ${estado === "pagado" ? "Marcar como no cobrado" : "Marcar como cobrado"}`}
                 className={cn(
-                  "tocable shrink-0 rounded-[8px] px-2.5 py-1 text-[0.8125rem] font-medium",
+                  "tocable shrink-0 rounded-[8px] px-3 py-2 text-[0.8125rem] font-medium ring-1 ring-inset ring-current/25",
                   estado === "pagado" && "pop bg-verde/15 text-verde",
                   estado === "vencido" && "bg-acento/15 text-acento-texto",
                   estado === "pendiente" && "bg-ambar/15 text-ambar",
@@ -131,6 +164,7 @@ export default function PlataPage() {
       <GastosSection gastos={(gastos ?? []).filter((g) => g.fecha.startsWith(periodo))} />
       <AumentosSection clients={clients ?? []} />
       <HistorialSection clients={clients ?? []} cobros={cobrosTodos ?? []} />
+      <AvisoDeshacerToast aviso={aviso} onCerrar={cerrarAviso} />
     </div>
   );
 }
@@ -207,9 +241,10 @@ function GastosSection({ gastos }: { gastos: NonNullable<ReturnType<typeof useGa
             <li key={g.id} className="flex items-center gap-3 px-2 py-3">
               <p className="min-w-0 flex-1 truncate">{g.concepto}</p>
               <p className="text-[0.9375rem] font-medium">${g.monto.toLocaleString("es-AR")}</p>
-              <button onClick={() => eliminarGasto(g.id)} aria-label="Eliminar gasto" className="tocable rounded-full p-1.5 text-texto-secundario hover:bg-acento/10 hover:text-acento-texto">
-                <Trash2 size={16} />
-              </button>
+              <BotonEliminar
+                etiqueta="gasto"
+                onConfirmar={() => void eliminarGasto(g.id).catch((err) => setError(err instanceof Error ? err.message : "No se pudo eliminar."))}
+              />
             </li>
           ))}
         </ul>
@@ -241,7 +276,7 @@ function AumentosSection({ clients }: { clients: NonNullable<ReturnType<typeof u
             </div>
             <button
               onClick={() => actualizarCliente(c.id, { ultimoAumento: toISODate(hoy) })}
-              className="tocable shrink-0 rounded-[8px] border border-borde px-2.5 py-1 text-[0.8125rem] font-medium hover:bg-borde/40"
+              className="tocable shrink-0 rounded-[8px] border border-borde px-3 py-2 text-[0.8125rem] font-medium hover:bg-borde/40"
             >
               Aplicado hoy
             </button>

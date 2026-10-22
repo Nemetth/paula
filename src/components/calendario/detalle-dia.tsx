@@ -25,9 +25,13 @@ export function DetalleDia({
   const vacio = info.tareas.length === 0 && info.hitos.length === 0 && info.cobros.length === 0 && !especial;
 
   return (
-    <section key={info.fecha} className="papel entra mt-5 px-4 py-3.5">
+    <section
+      key={info.fecha}
+      id="detalle-dia"
+      className="papel entra mt-5 scroll-mb-28 px-4 py-3.5"
+    >
       <header className="mb-2 flex items-baseline justify-between">
-        <h2 className="titulo text-[1.125rem] font-medium capitalize">
+        <h2 className="titulo text-[1.125rem] font-medium first-letter:uppercase">
           {format(fromISODate(info.fecha), "EEEE d 'de' MMMM", { locale: es })}
         </h2>
         {info.carga && info.carga.capacidad > 0 && (

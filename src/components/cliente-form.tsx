@@ -362,6 +362,7 @@ export function ClienteForm({
           value={values.notas}
           onChange={(e) => set("notas", e.target.value)}
           rows={3}
+          aria-label="Notas"
           className="input resize-none"
         />
       </Section>

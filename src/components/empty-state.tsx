@@ -45,7 +45,7 @@ export function EmptyState({
           <Sol />
         </div>
       )}
-      <p className="titulo text-[1.25rem] font-medium">{title}</p>
+      <p className="titulo text-balance text-[1.25rem] font-medium">{title}</p>
       <p className="mt-1 max-w-[38ch] text-[0.9375rem] text-texto-secundario">{detail}</p>
     </div>
   );

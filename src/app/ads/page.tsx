@@ -111,7 +111,7 @@ export default function AdsPage() {
                     </div>
                     <button
                       onClick={() => guardar(() => actualizarCliente(c.id, { adsUltimaRevision: hoyISO }))}
-                      className="tocable shrink-0 rounded-[8px] border border-borde px-2.5 py-1 text-[0.8125rem] font-medium hover:bg-borde/40"
+                      className="tocable shrink-0 rounded-[8px] border border-borde px-3 py-2 text-[0.8125rem] font-medium hover:bg-borde/40"
                     >
                       Revisada hoy
                     </button>
@@ -141,7 +141,7 @@ export default function AdsPage() {
                       )
                     }
                     className={cn(
-                      "tocable shrink-0 rounded-[8px] px-2.5 py-1 text-[0.8125rem] font-medium",
+                      "tocable shrink-0 rounded-[8px] px-3 py-2 text-[0.8125rem] font-medium",
                       f.estado === "enviado" && "bg-verde/15 text-verde",
                       f.estado === "pendiente" && !f.atrasado && "bg-ambar/15 text-ambar",
                       f.atrasado && "bg-acento/15 text-acento-texto",
@@ -175,7 +175,7 @@ function Boton({
       onClick={onClick}
       aria-pressed={activo}
       className={cn(
-        "tocable flex shrink-0 items-center gap-1 rounded-[8px] border px-2.5 py-1 text-[0.8125rem] font-medium",
+        "tocable flex shrink-0 items-center gap-1 rounded-[8px] border px-3 py-2 text-[0.8125rem] font-medium",
         activo
           ? tono === "verde"
             ? "pop border-verde/30 bg-verde/15 text-verde"

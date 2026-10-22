@@ -8,7 +8,7 @@
 // aparece en el otro" (PRODUCT.md) actually true across devices, not just
 // across components on one device.
 
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useSyncExternalStore } from "react";
 import { supabase } from "./client";
 import {
   AdsChequeo,
@@ -251,8 +251,10 @@ function getTableStore<Row extends { id: string }>(table: string): TableStore<Ro
         if (error) {
           console.error(`[${table}] fetch error`, error);
           rows = [];
+          marcarFalla(table, true);
         } else {
           rows = data ?? [];
+          marcarFalla(table, false);
         }
         notify();
       });
@@ -437,46 +439,106 @@ export function useFijosHechos(fechaISO: string): Set<string> | undefined {
   return new Set(rows.filter((r) => r.fecha === fechaISO).map((r) => r.fijoId));
 }
 
-export function useDayOverride(fechaISO: string): number | null | undefined {
-  const [horas, setHoras] = useState<number | null | undefined>(undefined);
+// Single-row reads (settings, a day's override) have no realtime channel. Each
+// lives in a small store that fetches when the first screen reads it and that a
+// write can update, so the screen that saved (and the bell, which reads the same
+// plan from the top bar) sees the change without a reload.
+function valorRefrescable<T>(cargar: () => PromiseLike<T>) {
+  let valor: T | undefined;
+  let lectores = 0;
+  const oyentes = new Set<() => void>();
 
-  useEffect(() => {
-    let cancelled = false;
-    supabase()
-      .from("day_overrides")
-      .select("horas_disponibles")
-      .eq("fecha", fechaISO)
-      .maybeSingle()
-      .then(({ data }) => {
-        if (!cancelled) setHoras(data?.horas_disponibles ?? null);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [fechaISO]);
+  function notificar() {
+    oyentes.forEach((l) => l());
+  }
 
-  return horas;
+  return {
+    subscribe(onStoreChange: () => void) {
+      oyentes.add(onStoreChange);
+      lectores += 1;
+      if (lectores === 1) {
+        cargar().then(
+          (v) => {
+            valor = v;
+            marcarFalla("single-row", false);
+            notificar();
+          },
+          (e) => {
+            console.error("[single-row] fetch error", e);
+            marcarFalla("single-row", true);
+          },
+        );
+      }
+      return () => {
+        oyentes.delete(onStoreChange);
+        lectores -= 1;
+      };
+    },
+    getSnapshot: () => valor,
+    set(v: T) {
+      valor = v;
+      notificar();
+    },
+  };
 }
 
+const overrides = new Map<string, ReturnType<typeof valorRefrescable<number | null>>>();
+
+function overrideDe(fechaISO: string) {
+  let s = overrides.get(fechaISO);
+  if (!s) {
+    s = valorRefrescable<number | null>(async () => {
+      const { data } = await supabase()
+        .from("day_overrides")
+        .select("horas_disponibles")
+        .eq("fecha", fechaISO)
+        .maybeSingle();
+      return data?.horas_disponibles ?? null;
+    });
+    overrides.set(fechaISO, s);
+  }
+  return s;
+}
+
+export function useDayOverride(fechaISO: string): number | null | undefined {
+  const s = overrideDe(fechaISO);
+  return useSyncExternalStore(s.subscribe, s.getSnapshot, () => undefined);
+}
+
+const estructuraStore = valorRefrescable<EstructuraSemanal | undefined>(async () => {
+  const { data } = await supabase().from("settings").select("estructura_semanal").maybeSingle();
+  return data?.estructura_semanal ?? undefined;
+});
+
 export function useEstructuraSemanal(): EstructuraSemanal | undefined {
-  const [estructura, setEstructura] = useState<EstructuraSemanal | undefined>(undefined);
+  return useSyncExternalStore(estructuraStore.subscribe, estructuraStore.getSnapshot, () => undefined);
+}
 
-  useEffect(() => {
-    let cancelled = false;
-    supabase()
-      .from("settings")
-      .select("estructura_semanal")
-      .maybeSingle()
-      .then(({ data }) => {
-        if (cancelled) return;
-        setEstructura(data?.estructura_semanal);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+// ---------- load failures ----------
+//
+// A failed fetch leaves the table empty, which the screens read as "nothing yet".
+// This flag is what lets the app tell Paula the data didn't load instead.
 
-  return estructura;
+const fallas = new Set<string>();
+const oyentesFalla = new Set<() => void>();
+
+function marcarFalla(fuente: string, falla: boolean) {
+  if (falla === fallas.has(fuente)) return;
+  if (falla) fallas.add(fuente);
+  else fallas.delete(fuente);
+  oyentesFalla.forEach((l) => l());
+}
+
+/** True while any table or setting failed to load. */
+export function useFallaDeCarga(): boolean {
+  return useSyncExternalStore(
+    (l) => {
+      oyentesFalla.add(l);
+      return () => oyentesFalla.delete(l);
+    },
+    () => fallas.size > 0,
+    () => false,
+  );
 }
 
 // ---------- writes ----------
@@ -787,10 +849,19 @@ export async function registrarTrabajo(entry: Omit<RegistroTrabajo, "id">): Prom
   if (error) throw error;
 }
 
-export async function bloquearDia(entry: Omit<DiaBloqueado, "id">): Promise<void> {
-  const { error } = await supabase()
+/** Returns the id of the block, so the caller can offer to undo it. */
+export async function bloquearDia(entry: Omit<DiaBloqueado, "id">): Promise<string> {
+  const { data, error } = await supabase()
     .from("blocked_dates")
-    .insert({ cliente_id: entry.clienteId, fecha: entry.fecha, motivo: entry.motivo, detalle: entry.detalle ?? null });
+    .insert({ cliente_id: entry.clienteId, fecha: entry.fecha, motivo: entry.motivo, detalle: entry.detalle ?? null })
+    .select("id")
+    .single();
+  if (error) throw error;
+  return (data as { id: string }).id;
+}
+
+export async function desbloquearDia(id: string): Promise<void> {
+  const { error } = await supabase().from("blocked_dates").delete().eq("id", id);
   if (error) throw error;
 }
 
@@ -811,6 +882,7 @@ export async function guardarHorasDia(fechaISO: string, horasDisponibles: number
       { onConflict: "user_id,fecha" },
     );
   if (error) throw error;
+  overrideDe(fechaISO).set(horasDisponibles);
 }
 
 export async function crearOActualizarCobro(
@@ -864,6 +936,7 @@ export async function guardarEstructuraSemanal(estructura: EstructuraSemanal): P
     .from("settings")
     .upsert({ user_id: userId, estructura_semanal: estructura }, { onConflict: "user_id" });
   if (error) throw error;
+  estructuraStore.set(estructura);
 }
 
 export const DEFAULT_FLUJO: FlujoConfig = {

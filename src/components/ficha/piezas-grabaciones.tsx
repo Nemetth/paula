@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
-import { Trash2 } from "lucide-react";
+import { BotonEliminar } from "@/components/boton-eliminar";
 import {
   actualizarGrabacion,
   asignarGrabacion,
@@ -125,7 +125,7 @@ export function SeccionPiezas({
           onChange={(e) => setTitulo(e.target.value)}
           placeholder="Título (opcional)"
           aria-label="Título de la pieza"
-          className={`${campo} min-w-0 flex-1`}
+          className={`${campo} min-w-[9rem] flex-1`}
         />
         <input
           type="number"
@@ -181,13 +181,7 @@ export function SeccionPiezas({
                     </option>
                   ))}
                 </select>
-                <button
-                  onClick={() => guardar(() => eliminarPieza(p.id))}
-                  aria-label="Eliminar pieza"
-                  className="text-texto-secundario"
-                >
-                  <Trash2 size={16} />
-                </button>
+                <BotonEliminar etiqueta="pieza" onConfirmar={() => guardar(() => eliminarPieza(p.id))} />
               </li>
             );
           })}
@@ -266,7 +260,10 @@ export function SeccionGrabaciones({
               <input
                 type="date"
                 value={g.fecha}
-                onChange={(e) => e.target.value && guardar(() => actualizarGrabacion(g.id, { fecha: e.target.value }))}
+                onChange={(e) =>
+                  // A half-typed year ("0002-10-20") must never reach the plan.
+                  e.target.value >= "2000-01-01" && guardar(() => actualizarGrabacion(g.id, { fecha: e.target.value }))
+                }
                 aria-label="Fecha de grabación"
                 className={`${campo} py-1.5`}
               />
@@ -283,13 +280,7 @@ export function SeccionGrabaciones({
                 />
                 Hecha
               </label>
-              <button
-                onClick={() => guardar(() => eliminarGrabacion(g.id))}
-                aria-label="Eliminar grabación"
-                className="text-texto-secundario"
-              >
-                <Trash2 size={16} />
-              </button>
+              <BotonEliminar etiqueta="grabación" onConfirmar={() => guardar(() => eliminarGrabacion(g.id))} />
             </li>
           ))}
         </ul>

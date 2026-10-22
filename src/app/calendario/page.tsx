@@ -1,7 +1,7 @@
 "use client";
 
 import { Encabezado } from "@/components/encabezado";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { addMonths, addWeeks, endOfMonth, format, startOfMonth } from "date-fns";
 import { es } from "date-fns/locale";
@@ -30,6 +30,11 @@ export default function CalendarioPage() {
   const [ancla, setAncla] = useState<Date>(today);
   const [seleccionado, setSeleccionado] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // On a phone the day's detail renders below the whole grid: bring it into view.
+  useEffect(() => {
+    if (seleccionado) document.getElementById("detalle-dia")?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [seleccionado]);
 
   const ctx = usePlan(HORIZONTE_DIAS);
   const plan = ctx?.plan ?? null;

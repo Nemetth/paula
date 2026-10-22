@@ -3,6 +3,8 @@
 import { ViewTransition } from "react";
 import { AccionesGlobales } from "./acciones-globales";
 import { BottomNav } from "./bottom-nav";
+import { CambioDeDia } from "./cambio-de-dia";
+import { FallaDeCarga } from "./falla-de-carga";
 import { Sidebar } from "./sidebar";
 
 /** Wires up the desktop sidebar + mobile bottom nav around page content.
@@ -13,6 +15,8 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
       <Sidebar />
       <main className="relative flex-1 pb-[calc(96px+env(safe-area-inset-bottom,0px))] lg:pb-10 lg:pl-[240px]">
         <AccionesGlobales />
+        <CambioDeDia />
+        <FallaDeCarga />
         <ViewTransition default="pagina">
           <div>{children}</div>
         </ViewTransition>

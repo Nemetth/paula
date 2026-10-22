@@ -13,6 +13,7 @@ import {
   PackageCheck,
   Presentation,
   Settings,
+  Undo2,
   Video,
   Wallet,
 } from "lucide-react";
@@ -38,10 +39,12 @@ import { cobrosVencidos } from "@/lib/domain/cobros";
 import { reportesDelMes } from "@/lib/domain/ads";
 import { colorCliente } from "@/lib/domain/calendario";
 import { Client, topeDelDia } from "@/lib/domain/types";
+import { NOMBRE, bajadaDelDia, fraseDelAvance, saludo } from "@/lib/domain/voz";
 import { DisruptionSheet } from "@/components/disruption-sheet";
 import { Cargando, EmptyState } from "@/components/empty-state";
 import { Encabezado } from "@/components/encabezado";
 import { Inki } from "@/components/inki";
+import { Sello } from "@/components/sello";
 import { FilaDeslizable } from "@/components/fila-deslizable";
 import { AvisoDeshacer, AvisoDeshacerToast } from "@/components/aviso-deshacer";
 import { MensajesPendientes } from "@/components/mensajes-pendientes";
@@ -50,11 +53,6 @@ import { Tilde } from "@/components/tilde";
 import { cn, indice } from "@/lib/utils";
 
 const fechaLarga = (iso: string) => format(fromISODate(iso), "EEE d MMM", { locale: es });
-
-function saludo(d: Date) {
-  const h = d.getHours();
-  return h < 6 ? "Buenas noches" : h < 13 ? "Buen día" : h < 20 ? "Buenas tardes" : "Buenas noches";
-}
 
 export default function HoyPage() {
   const today = useMemo(() => new Date(), []);
@@ -243,6 +241,8 @@ export default function HoyPage() {
         grande
         arriba={format(today, "EEEE d 'de' MMMM", { locale: es })}
         titulo={saludo(today)}
+        nombre={NOMBRE}
+        bajada={motivoBloqueo ? undefined : bajadaDelDia(hoy)}
         derecha={
           <Link
             href="/ajustes"
@@ -297,7 +297,7 @@ export default function HoyPage() {
         </section>
       )}
 
-      <section className="destacado entra mb-5 px-5 pb-5 pt-4" style={indice(2)}>
+      <section className="destacado entra relative mb-5 px-5 pb-4 pt-4" style={indice(2)}>
         <div className="flex items-end justify-between gap-3">
           <div>
             <p className="text-[0.8125rem] font-medium text-sobre-oscuro/70">Lo de hoy</p>
@@ -310,10 +310,14 @@ export default function HoyPage() {
               </p>
             )}
           </div>
-          {hoy.total > 0 && (
-            <p className="numeros titulo text-[1.25rem] text-acento">{completo ? "¡Listo!" : `${pct}%`}</p>
-          )}
+          {hoy.total > 0 && !completo && <p className="numeros titulo text-[1.25rem] text-acento">{pct}%</p>}
         </div>
+        {completo && (
+          <Sello
+            texto="DÍA · CUMPLIDO · BIEN · HECHO ·"
+            className="sello-cae pointer-events-none absolute -top-3 right-3 h-[92px] w-[92px] text-acento"
+          />
+        )}
         <div
           className="barra mt-3.5"
           role="progressbar"
@@ -324,7 +328,10 @@ export default function HoyPage() {
         >
           <div className="barra-relleno" style={{ width: `${pct}%` }} />
         </div>
-        <p className="mt-2.5 text-[0.8125rem] text-sobre-oscuro/70">
+        <p key={fraseDelAvance(hoy)} className="aparece mt-3 text-[0.9375rem] font-medium leading-snug">
+          {fraseDelAvance(hoy)}
+        </p>
+        <p className="mt-0.5 text-[0.8125rem] text-sobre-oscuro/65">
           {capacidad > 0
             ? `Tope de hoy: ${fmtPiezas(capacidad)} ${capacidad === 1 ? "pieza" : "piezas"}` +
               (carga?.semaforo === "sobrecargado" ? " · te pasás, empezá por lo de arriba" : "")
@@ -511,6 +518,7 @@ export default function HoyPage() {
         open={cambioAbierto}
         onClose={() => setCambioAbierto(false)}
         clients={clients.filter((c) => c.activo)}
+        piezas={piezas}
         today={todayISO}
         tareasHoy={plan.asignaciones.filter((a) => a.fecha === todayISO)}
         tareasProximas={proximas.filter((a) => sePuedeTildar(a.unidad))}
@@ -524,7 +532,7 @@ export default function HoyPage() {
 
 function clienteDe(clients: Client[], id?: string) {
   const c = clients.find((x) => x.id === id);
-  return c ? { nombre: c.nombre, color: colorCliente(clients, c.id) } : undefined;
+  return c ? { id: c.id, nombre: c.nombre, color: colorCliente(clients, c.id) } : undefined;
 }
 
 function DetalleUnidad({ a, hoyISO }: { a: Asignacion; hoyISO: string }) {
@@ -561,7 +569,7 @@ function FilaHoy({
 }: {
   hecha: boolean;
   titulo: string;
-  cliente?: { nombre: string; color: string };
+  cliente?: { id: string; nombre: string; color: string };
   detalle?: React.ReactNode;
   onTildar: () => void;
   onDeshacer?: () => void;
@@ -577,7 +585,9 @@ function FilaHoy({
           {cliente && (
             <p className="flex items-center gap-1.5 text-[0.8125rem] font-medium text-texto-secundario">
               <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: cliente.color }} aria-hidden />
-              <span className="truncate">{cliente.nombre}</span>
+              <Link href={`/clientes/${cliente.id}`} className="truncate hover:text-texto hover:underline">
+                {cliente.nombre}
+              </Link>
             </p>
           )}
           <p className={cn("text-[1rem] font-medium leading-snug", hecha && "line-through decoration-texto-secundario/50")}>
@@ -593,10 +603,9 @@ function FilaHoy({
           <button
             onClick={onManana}
             aria-label="Pasar a mañana"
-            title="Pasar a mañana"
-            className="tocable hidden shrink-0 rounded-full p-2 text-texto-secundario hover:bg-borde/50 lg:block"
+            className="tocable flex shrink-0 items-center gap-1 self-center rounded-full border border-borde px-2.5 py-1.5 text-[0.75rem] font-medium text-texto-secundario hover:bg-borde/50 hover:text-texto"
           >
-            <ArrowRight size={16} />
+            Mañana <ArrowRight size={13} />
           </button>
         )}
       </div>
@@ -625,7 +634,7 @@ function CerrarDia({
   nombres: Map<string, string>;
   mananaISO: string;
 }) {
-  const [cerrado, setCerrado] = useState<{ hechas: number; total: number; pasadas: number } | null>(null);
+  const [cerrado, setCerrado] = useState<{ hechas: number; total: number; pasadas: number; ids: string[] } | null>(null);
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const pct = total === 0 ? 0 : Math.round((hechas / total) * 100);
@@ -640,13 +649,26 @@ function CerrarDia({
     setGuardando(true);
     setError(null);
     try {
-      await posponerUnidades(
-        pendientes.map((a) => a.unidad.id),
-        mananaISO,
-      );
-      setCerrado({ hechas, total, pasadas: pendientes.length });
+      const ids = pendientes.map((a) => a.unidad.id);
+      await posponerUnidades(ids, mananaISO);
+      setCerrado({ hechas, total, pasadas: ids.length, ids });
     } catch (e) {
       setError(e instanceof Error ? e.message : "No se pudo cerrar el día. Probá de nuevo.");
+    } finally {
+      setGuardando(false);
+    }
+  }
+
+  /** Take the day back: what moved to tomorrow returns to today's list. */
+  async function reabrir() {
+    if (!cerrado) return;
+    setGuardando(true);
+    setError(null);
+    try {
+      await Promise.all(cerrado.ids.map((id) => quitarPospuesta(id)));
+      salir();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "No se pudo deshacer. Probá de nuevo.");
     } finally {
       setGuardando(false);
     }
@@ -656,10 +678,11 @@ function CerrarDia({
     <Sheet open={open} title="Cerrar el día" onClose={salir}>
       {cerrado ? (
         <div className="flex flex-col items-center pt-2 text-center">
-          <span className="pop mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-acento/40 text-acento-texto">
-            <Moon size={24} strokeWidth={2} />
-          </span>
-          <p className="titulo text-[1.25rem]">Día cerrado</p>
+          <Sello
+            texto="DÍA · CERRADO · HASTA · MAÑANA ·"
+            className="sello-cae mb-3 h-[96px] w-[96px] text-acento-texto"
+          />
+          <p className="titulo text-[1.25rem]">Día cerrado, {NOMBRE}</p>
           <p className="entra mb-5 mt-1 max-w-[34ch] text-[0.9375rem] text-texto-secundario" style={indice(2)}>
             Avanzaste {cerrado.hechas} de {cerrado.total}.
             {cerrado.pasadas > 0
@@ -667,6 +690,16 @@ function CerrarDia({
               : " No quedó nada pendiente."}
           </p>
           <BotonPrimario onClick={salir}>Listo</BotonPrimario>
+          {cerrado.ids.length > 0 && (
+            <button
+              onClick={reabrir}
+              disabled={guardando}
+              className="tocable mt-2 flex w-full items-center justify-center gap-1.5 rounded-[12px] border border-borde px-5 py-3 font-medium hover:bg-borde/40 disabled:opacity-60"
+            >
+              <Undo2 size={16} /> Deshacer: volver a hoy
+            </button>
+          )}
+          {error && <p className="mt-3 text-[0.8125rem] text-[var(--color-error)]">{error}</p>}
         </div>
       ) : (
         <div className="flex flex-col gap-4">

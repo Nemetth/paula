@@ -8,14 +8,16 @@
   --color-sobre-acento: #3a1626;
   --color-oscuro: #2a2e36;
   --color-sobre-oscuro: #f6f7f9;
-  --color-verde: #3b8466;
-  --color-ambar: #c28a2c;
+  /* Verde, ámbar and the secondary text are darker than the dark theme's: they set
+   * small text on white and on their own 15% tints, and need 4.5:1 there. */
+  --color-verde: #2c6a50;
+  --color-ambar: #8f6215;
   --color-error: #b3261e;
   --color-bg: #eceff3;
   --color-bg-elevada: #ffffff;
   --color-bg-hundida: #f1f3f6;
   --color-texto: #20242b;
-  --color-texto-secundario: #667085;
+  --color-texto-secundario: #5b6577;
   --color-borde: #e1e5eb;
 
   /* Depth: cool-tinted, always offset — light comes from above. */
@@ -26,6 +28,7 @@
   --shadow-boton: 0 1px 0 rgba(255, 255, 255, 0.14) inset, 0 6px 14px -6px rgba(30, 40, 60, 0.5);
 
   --luz-opacidad: 0.7;
+  --trama-opacidad: 0.07;
 
   --ease-salida: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-resorte: cubic-bezier(0.34, 1.56, 0.64, 1);
@@ -34,7 +37,7 @@
 @media (prefers-color-scheme: dark) {
   :root {
     --color-acento: #f2a9c1;
-    --color-acento-texto: #f6b0c6;
+    --color-acento-texto: #fbc4d5;
     --color-sobre-acento: #3a1626;
     --color-oscuro: #333947;
     --color-sobre-oscuro: #f6f7f9;
@@ -53,6 +56,7 @@
     --shadow-papel-alto: 0 2px 4px rgba(0, 0, 0, 0.35), 0 16px 32px -12px rgba(0, 0, 0, 0.6);
     --shadow-boton: 0 1px 0 rgba(255, 255, 255, 0.1) inset, 0 6px 14px -6px rgba(0, 0, 0, 0.6);
     --luz-opacidad: 0.2;
+    --trama-opacidad: 0.06;
   }
 }
 
@@ -121,7 +125,29 @@ body {
   margin-left: -40vmax;
   border-radius: 50%;
   filter: blur(70px);
-  background: radial-gradient(closest-side, color-mix(in oklab, var(--color-acento) 70%, transparent), transparent);
+  background: radial-gradient(closest-side, color-mix(in oklab, var(--luz-color, var(--color-acento)) 70%, transparent), transparent);
+}
+
+/* ───────────── Texture: the community manager's wallpaper ─────────────
+ * A tile of her trade (likes, comments, hashtags, reels, the content calendar,
+ * metrics) drawn in the text colour at a whisper, fading toward the bottom so
+ * it adds depth to the margins without competing with the list. */
+
+.trama {
+  pointer-events: none;
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  background: var(--color-texto);
+  opacity: var(--trama-opacidad);
+  -webkit-mask:
+    url("/trama.svg") 0 0 / 260px 260px repeat,
+    linear-gradient(to bottom, #000 0%, rgba(0, 0, 0, 0.35) 100%);
+  -webkit-mask-composite: source-in;
+  mask:
+    url("/trama.svg") 0 0 / 260px 260px repeat,
+    linear-gradient(to bottom, #000 0%, rgba(0, 0, 0, 0.35) 100%);
+  mask-composite: intersect;
 }
 
 @layer components {
@@ -539,6 +565,21 @@ body {
   .matasellos {
     color: var(--color-acento);
     mix-blend-mode: normal;
+  }
+}
+
+/* A seal hitting the page: comes in big and tilted, lands with a little bounce. */
+.sello-cae {
+  transform: rotate(-12deg);
+  animation: sello-cae 520ms var(--ease-resorte) 220ms backwards;
+}
+@keyframes sello-cae {
+  from {
+    opacity: 0;
+    transform: scale(2.2) rotate(-42deg);
+  }
+  40% {
+    opacity: 1;
   }
 }
 

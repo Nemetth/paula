@@ -3,10 +3,12 @@
 import { useEffect, useState } from "react";
 import Image from "next/image";
 import { Dog } from "lucide-react";
+import { Sello } from "@/components/sello";
 
 const DURACION_SALIDA = 220;
 
-/** Floating dog above the "+": opens Inki's stamp, the site's supervisor. */
+/** Floating dog above the "+": opens Inki's stamp, the site's supervisor.
+ * Desktop only: on a phone it covered the rows. */
 export function Inki() {
   const [abierta, setAbierta] = useState(false);
 
@@ -15,7 +17,7 @@ export function Inki() {
       <button
         onClick={() => setAbierta(true)}
         aria-label="Inki, supervisor del sitio"
-        className="tocable group fixed bottom-[calc(160px+env(safe-area-inset-bottom,0px))] right-4 z-40 flex h-14 w-14 items-center justify-center rounded-[18px] bg-acento text-sobre-acento shadow-boton lg:bottom-[100px] lg:right-8"
+        className="tocable group fixed bottom-[100px] right-8 z-40 hidden h-14 w-14 items-center justify-center rounded-[18px] bg-acento text-sobre-acento shadow-boton lg:flex"
       >
         <Dog
           size={26}
@@ -92,22 +94,9 @@ function Estampilla({ abierta, onClose }: { abierta: boolean; onClose: () => voi
 /** Postmark that half-covers the stamp's corner, like it was just mailed. */
 function Matasellos() {
   return (
-    <svg
-      viewBox="0 0 100 100"
-      aria-hidden
+    <Sello
+      texto="SUPERVISOR · OFICIAL · INKI ·"
       className="matasellos pointer-events-none absolute -bottom-8 -right-9 h-[84px] w-[84px]"
-    >
-      <defs>
-        <path id="matasellos-arco" d="M50 50 m-35 0 a35 35 0 1 1 70 0 a35 35 0 1 1 -70 0" />
-      </defs>
-      <circle cx="50" cy="50" r="46" fill="none" stroke="currentColor" strokeWidth="2.5" />
-      <circle cx="50" cy="50" r="27" fill="none" stroke="currentColor" strokeWidth="1.5" />
-      <text fontSize="10" fontWeight="600" fill="currentColor">
-        <textPath href="#matasellos-arco" textLength="216" lengthAdjust="spacing">
-          SUPERVISOR · OFICIAL · INKI ·
-        </textPath>
-      </text>
-      <path d="M38 52 l8 8 l16 -18" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
+    />
   );
 }

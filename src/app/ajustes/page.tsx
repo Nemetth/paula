@@ -36,6 +36,7 @@ export default function AjustesPage() {
   const [editada, setEditada] = useState<EstructuraSemanal | null>(null);
   const [saving, setSaving] = useState(false);
   const [guardado, setGuardado] = useState(false);
+  const [errorGuardado, setErrorGuardado] = useState<string | null>(null);
   const estructura = editada ?? estructuraGuardada ?? DEFAULT_ESTRUCTURA_SEMANAL;
   const trabajo = diasDeTrabajo(estructura);
   const pesos = pesosPieza(estructura);
@@ -86,6 +87,7 @@ export default function AjustesPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
+    setErrorGuardado(null);
     try {
       await guardarEstructuraSemanal({
         ...estructura,
@@ -96,6 +98,9 @@ export default function AjustesPage() {
         fijosDiarios: (estructura.fijosDiarios ?? []).filter((f) => f.nombre.trim()),
       });
       setGuardado(true);
+    } catch (err) {
+      console.error(err);
+      setErrorGuardado(err instanceof Error ? err.message : "No se pudo guardar. Probá de nuevo.");
     } finally {
       setSaving(false);
     }
@@ -169,11 +174,11 @@ export default function AjustesPage() {
               return (
                 <li key={valor} className="flex flex-wrap items-center gap-x-3 gap-y-2 px-2 py-3">
                   <span className="w-24 shrink-0 text-[0.9375rem] font-medium">{label}</span>
-                  <label className="flex items-center gap-2 text-[0.8125rem] text-texto-secundario">
+                  <label className="flex items-center gap-2 py-1.5 text-[0.8125rem] text-texto-secundario">
                     <input type="checkbox" checked={trabaja} onChange={() => toggleTrabajo(valor)} className={casilla} />
                     Trabajo
                   </label>
-                  <label className="flex items-center gap-2 text-[0.8125rem] text-texto-secundario">
+                  <label className="flex items-center gap-2 py-1.5 text-[0.8125rem] text-texto-secundario">
                     <input
                       type="checkbox"
                       checked={estructura.diasGrabacionHabituales.includes(valor)}
@@ -245,6 +250,11 @@ export default function AjustesPage() {
 
         <InstalarApp />
 
+        {errorGuardado && (
+          <p role="alert" className="text-center text-[0.8125rem] text-[var(--color-error)]">
+            No se guardó: {errorGuardado}
+          </p>
+        )}
         <button
           type="submit"
           disabled={saving}
