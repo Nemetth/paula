@@ -3,7 +3,7 @@
 // needs a connection to read or write it (see PRODUCT.md). Intercepting those
 // requests would show stale data as if it were live, so only same-origin pages
 // and static assets go through this worker.
-const CACHE = "paula-shell-v2";
+const CACHE = "paula-shell-v3";
 const SHELL = ["/hoy", "/calendario", "/clientes", "/ads", "/plata"];
 
 self.addEventListener("install", (event) => {
@@ -43,5 +43,34 @@ self.addEventListener("fetch", (event) => {
       .catch(() =>
         caches.match(request).then((res) => res ?? (esPagina ? caches.match("/hoy") : Response.error())),
       ),
+  );
+});
+
+// Morning notification (sent by /api/aviso-manana): today's line, and a tap opens Hoy.
+self.addEventListener("push", (event) => {
+  let aviso = { titulo: "Paula", cuerpo: "Mirá lo de hoy.", url: "/hoy" };
+  try {
+    aviso = { ...aviso, ...event.data.json() };
+  } catch {}
+  event.waitUntil(
+    self.registration.showNotification(aviso.titulo, {
+      body: aviso.cuerpo,
+      icon: "/icon-192.png",
+      badge: "/icon-192.png",
+      tag: "aviso-manana",
+      data: { url: aviso.url },
+    }),
+  );
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const url = (event.notification.data && event.notification.data.url) || "/hoy";
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((ventanas) => {
+      const abierta = ventanas.find((v) => new URL(v.url).origin === self.location.origin);
+      if (abierta) return abierta.focus().then((v) => v.navigate(url));
+      return self.clients.openWindow(url);
+    }),
   );
 });

@@ -1,7 +1,37 @@
 "use client";
 
-import { useEffect } from "react";
+import { useCallback, useEffect, useSyncExternalStore } from "react";
 import { Undo2 } from "lucide-react";
+
+// A notice that outlives the component that raised it: moving a delivery from
+// a message makes that message disappear, but the way back has to stay.
+let global: AvisoDeshacer | null = null;
+let siguiente = 0;
+const oyentes = new Set<() => void>();
+const avisar = () => oyentes.forEach((l) => l());
+
+export function avisarConDeshacer(texto: string, deshacer: () => void) {
+  siguiente += 1;
+  global = { id: -siguiente, texto, deshacer };
+  avisar();
+}
+
+/** Rendered once by the app frame. */
+export function AvisoGlobal() {
+  const aviso = useSyncExternalStore(
+    (l) => {
+      oyentes.add(l);
+      return () => oyentes.delete(l);
+    },
+    () => global,
+    () => null,
+  );
+  const cerrar = useCallback(() => {
+    global = null;
+    avisar();
+  }, []);
+  return <AvisoDeshacerToast aviso={aviso} onCerrar={cerrar} />;
+}
 
 const DURACION = 6000;
 

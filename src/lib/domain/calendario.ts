@@ -5,8 +5,7 @@ import { addDays, eachDayOfInterval, endOfMonth, endOfWeek, startOfMonth, startO
 import { toISODate } from "./dates";
 import { estadoCobro } from "./cobros";
 import { Asignacion, CargaDia, Hito, Plan } from "./planner";
-import { Client, Cobro, Grabacion, Pieza } from "./types";
-import { fechaEntregaDe } from "./planner";
+import { Client, Cobro, Pieza } from "./types";
 
 export interface DiaCalendario {
   fecha: string;
@@ -79,15 +78,11 @@ export interface CierreMes {
 export function cierreDelMes(
   ancla: Date,
   piezas: Pieza[],
-  grabaciones: Grabacion[],
   plan: Plan,
 ): CierreMes {
   const periodo = toISODate(ancla).slice(0, 7);
-  const delMes = piezas.filter((p) => {
-    const f = p.periodoPublicacion ?? fechaEntregaDe(p, grabaciones)?.slice(0, 7);
-    return f === periodo;
-  });
-  const entregadas = delMes.filter((p) => p.estado === "entregada" || p.estado === "programada").length;
+  const delMes = piezas.filter((p) => (p.periodoPublicacion ?? p.fechaEntrega?.slice(0, 7)) === periodo);
+  const entregadas = delMes.filter((p) => p.hecha).length;
 
   let carga = 0;
   let capacidad = 0;

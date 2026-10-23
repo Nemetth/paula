@@ -14,7 +14,9 @@ import {
   AdsChequeo,
   AdsEstado,
   AdsReporte,
+  AdsEstadoCuenta,
   AdsReporteEstado,
+  Ciclo,
   Client,
   ClienteEstado,
   ClienteTipo,
@@ -31,7 +33,6 @@ import {
   PieceType,
   Tarea,
   Pieza,
-  PiezaEstado,
   RegistroTrabajo,
   Servicio,
   VolumenMensual,
@@ -39,54 +40,8 @@ import {
 
 // ---------- row <-> domain mapping ----------
 
-type ClientRow = {
-  id: string;
-  nombre: string;
-  tipo: ClienteTipo | null;
-  estado: ClienteEstado | null;
-  intocable: boolean | null;
-  ads_ultima_revision: string | null;
-  ultimo_aumento: string | null;
-  notas_reunion: string | null;
-  rubro: string | null;
-  servicio: Servicio;
-  volumen_mensual: VolumenMensual;
-  flujo: FlujoConfig;
-  contacto_whatsapp: string | null;
-  ventana_cobro: [number, number] | null;
-  monto_mensual: number | null;
-  activo: boolean;
-  notas: string | null;
-  creado_en: string;
-};
+import { ClientRow, GrabacionRow, PiezaRow, BlockedRow, rowToBlocked, rowToClient, rowToGrabacion, rowToPieza } from "./filas";
 
-function rowToClient(r: ClientRow): Client {
-  return {
-    id: r.id,
-    nombre: r.nombre,
-    tipo: r.tipo ?? "mensual",
-    estado: r.estado ?? "al-dia",
-    intocable: r.intocable ?? false,
-    adsUltimaRevision: r.ads_ultima_revision ?? undefined,
-    ultimoAumento: r.ultimo_aumento ?? undefined,
-    notasReunion: r.notas_reunion ?? undefined,
-    rubro: r.rubro ?? undefined,
-    servicio: r.servicio,
-    volumenMensual: r.volumen_mensual,
-    flujo: r.flujo,
-    contactoWhatsapp: r.contacto_whatsapp ?? undefined,
-    ventanaCobro: r.ventana_cobro ?? undefined,
-    montoMensual: r.monto_mensual ?? undefined,
-    activo: r.activo,
-    notas: r.notas ?? undefined,
-    creadoEn: r.creado_en,
-  };
-}
-
-type BlockedRow = { id: string; cliente_id: string; fecha: string; motivo: DiaBloqueado["motivo"]; detalle: string | null };
-function rowToBlocked(r: BlockedRow): DiaBloqueado {
-  return { id: r.id, clienteId: r.cliente_id, fecha: r.fecha, motivo: r.motivo, detalle: r.detalle ?? undefined };
-}
 
 type WorkLogRow = {
   id: string;
@@ -130,68 +85,8 @@ function rowToCobro(r: CobroRow): Cobro {
   };
 }
 
-type PiezaRow = {
-  id: string;
-  cliente_id: string;
-  tipo: PieceType;
-  estado: PiezaEstado;
-  titulo: string | null;
-  grabacion_id: string | null;
-  guion_listo: boolean;
-  periodo_publicacion: string | null;
-  fecha_publicacion: string | null;
-  fecha_entrega: string | null;
-  tanda: 1 | 2;
-  horas_reales: number | null;
-  no_antes_de: string | null;
-  creada_en: string;
-};
-function rowToPieza(r: PiezaRow): Pieza {
-  return {
-    id: r.id,
-    clienteId: r.cliente_id,
-    tipo: r.tipo,
-    estado: r.estado,
-    titulo: r.titulo ?? undefined,
-    grabacionId: r.grabacion_id ?? undefined,
-    guionListo: r.guion_listo,
-    periodoPublicacion: r.periodo_publicacion ?? undefined,
-    fechaPublicacion: r.fecha_publicacion ?? undefined,
-    fechaEntrega: r.fecha_entrega ?? undefined,
-    tanda: r.tanda,
-    horasReales: r.horas_reales != null ? Number(r.horas_reales) : undefined,
-    noAntesDe: r.no_antes_de ?? undefined,
-    creadaEn: r.creada_en,
-  };
-}
 
-type GrabacionRow = {
-  id: string;
-  cliente_id: string;
-  fecha: string;
-  viaje_dias_antes: number;
-  viaje_dias_despues: number;
-  hecha: boolean;
-  guiones: string | null;
-  tomas: string[];
-  alimenta: string[];
-  notas: string | null;
-};
-function rowToGrabacion(r: GrabacionRow): Grabacion {
-  return {
-    id: r.id,
-    clienteId: r.cliente_id,
-    fecha: r.fecha,
-    viajeDiasAntes: r.viaje_dias_antes,
-    viajeDiasDespues: r.viaje_dias_despues,
-    hecha: r.hecha,
-    guiones: r.guiones ?? undefined,
-    tomas: r.tomas ?? [],
-    alimenta: r.alimenta ?? [],
-    notas: r.notas ?? undefined,
-  };
-}
-
+type CicloRow = { id: string; cliente_id: string; entrega: string };
 type IdeaRow = { id: string; cliente_id: string; texto: string; usada: boolean; creada_en: string };
 type ChequeoRow = { id: string; cliente_id: string; fecha: string; estado: AdsEstado; nota: string | null };
 type ReporteRow = { id: string; cliente_id: string; periodo: string; estado: AdsReporteEstado };
@@ -331,6 +226,10 @@ export function useGrabaciones(): Grabacion[] | undefined {
   return useTable<GrabacionRow, Grabacion>("grabaciones", rowToGrabacion);
 }
 
+export function useCiclos(): Ciclo[] | undefined {
+  return useTable<CicloRow, Ciclo>("ciclos", (r) => ({ id: r.id, clienteId: r.cliente_id, entrega: r.entrega }));
+}
+
 export function useIdeas(): Idea[] | undefined {
   return useTable<IdeaRow, Idea>("ideas", (r) => ({
     id: r.id,
@@ -394,9 +293,9 @@ type TareaHechaRow = {
   anterior: string | null;
 };
 
-/** Everything ticked off on `fechaISO`. */
-export function useTareasHechas(fechaISO: string): TareaHecha[] | undefined {
-  const rows = useTable<TareaHechaRow, TareaHecha>("tareas_hechas", (r) => ({
+/** Everything ever ticked off. */
+export function useTodasLasHechas(): TareaHecha[] | undefined {
+  return useTable<TareaHechaRow, TareaHecha>("tareas_hechas", (r) => ({
     id: r.id,
     fecha: r.fecha,
     unidadId: r.unidad_id,
@@ -405,13 +304,42 @@ export function useTareasHechas(fechaISO: string): TareaHecha[] | undefined {
     tipo: r.tipo,
     anterior: r.anterior ?? undefined,
   }));
-  return rows?.filter((r) => r.fecha === fechaISO);
+}
+
+/** Everything ticked off on `fechaISO`. */
+export function useTareasHechas(fechaISO: string): TareaHecha[] | undefined {
+  return useTodasLasHechas()?.filter((r) => r.fecha === fechaISO);
 }
 
 /** Units moved to a later day: unit id → first day it can be worked. */
 export function usePospuestas(): Record<string, string> | undefined {
   const rows = useTable<{ id: string; hasta: string }, { id: string; hasta: string }>("pospuestas", (r) => r);
   return rows ? Object.fromEntries(rows.map((r) => [r.id, r.hasta])) : undefined;
+}
+
+/** Days Paula finished everything Hoy had for her (ISO dates), for the streak. */
+export function useDiasCumplidos(): Set<string> | undefined {
+  const rows = useTable<{ id: string }, string>("dias_cumplidos", (r) => r.id);
+  return rows ? new Set(rows) : undefined;
+}
+
+export async function marcarDiaCumplido(fechaISO: string): Promise<void> {
+  const { error } = await supabase().from("dias_cumplidos").upsert({ id: fechaISO });
+  if (error) throw error;
+}
+
+/** Save this device's push subscription for the morning notification. */
+export async function guardarSuscripcionPush(suscripcion: PushSubscriptionJSON): Promise<void> {
+  if (!suscripcion.endpoint) throw new Error("La suscripción no tiene endpoint.");
+  const { error } = await supabase()
+    .from("push_suscripciones")
+    .upsert({ id: suscripcion.endpoint, suscripcion });
+  if (error) throw error;
+}
+
+export async function borrarSuscripcionPush(endpoint: string): Promise<void> {
+  const { error } = await supabase().from("push_suscripciones").delete().eq("id", endpoint);
+  if (error) throw error;
 }
 
 /** Ids of the WhatsApp messages already sent. */
@@ -505,12 +433,21 @@ export function useDayOverride(fechaISO: string): number | null | undefined {
   return useSyncExternalStore(s.subscribe, s.getSnapshot, () => undefined);
 }
 
-const estructuraStore = valorRefrescable<EstructuraSemanal | undefined>(async () => {
-  const { data } = await supabase().from("settings").select("estructura_semanal").maybeSingle();
-  return data?.estructura_semanal ?? undefined;
+const estructuraStore = valorRefrescable<EstructuraSemanal | null>(async () => {
+  // Filtered by user: an old row from the days with login can still be in the table.
+  const { data, error } = await supabase()
+    .from("settings")
+    .select("estructura_semanal")
+    .eq("user_id", FIXED_USER_ID)
+    .maybeSingle();
+  // On a failed read the plan still loads with the default week; the load-failure banner says why.
+  marcarFalla("settings", !!error);
+  if (error) console.error("[settings] fetch error", error);
+  return data?.estructura_semanal ?? null;
 });
 
-export function useEstructuraSemanal(): EstructuraSemanal | undefined {
+/** `undefined` while loading, `null` when Paula never saved her week (use the default). */
+export function useEstructuraSemanal(): EstructuraSemanal | null | undefined {
   return useSyncExternalStore(estructuraStore.subscribe, estructuraStore.getSnapshot, () => undefined);
 }
 
@@ -557,6 +494,9 @@ export interface NuevoClienteInput {
   estado?: ClienteEstado;
   intocable?: boolean;
   adsUltimaRevision?: string;
+  adsCuentaUrl?: string;
+  adsEstadoCuenta?: AdsEstadoCuenta;
+  adsRefreshCreativos?: string;
   ultimoAumento?: string;
   notasReunion?: string;
 }
@@ -576,6 +516,10 @@ function clienteInputToRow(input: NuevoClienteInput) {
     estado: input.estado,
     intocable: input.intocable,
     ads_ultima_revision: input.adsUltimaRevision,
+    // An empty link or date clears it.
+    ads_cuenta_url: input.adsCuentaUrl === "" ? null : input.adsCuentaUrl,
+    ads_estado_cuenta: input.adsEstadoCuenta,
+    ads_refresh_creativos: input.adsRefreshCreativos === "" ? null : input.adsRefreshCreativos,
     ultimo_aumento: input.ultimoAumento,
     notas_reunion: input.notasReunion,
   };
@@ -617,8 +561,9 @@ function piezaToRow(p: Partial<Omit<Pieza, "id" | "creadaEn">>) {
   const row = {
     cliente_id: p.clienteId,
     tipo: p.tipo,
-    estado: p.estado,
+    hecha: p.hecha,
     titulo: p.titulo,
+    ciclo_id: p.cicloId,
     grabacion_id: p.grabacionId,
     guion_listo: p.guionListo,
     periodo_publicacion: p.periodoPublicacion,
@@ -627,21 +572,49 @@ function piezaToRow(p: Partial<Omit<Pieza, "id" | "creadaEn">>) {
     tanda: p.tanda,
     horas_reales: p.horasReales,
     no_antes_de: p.noAntesDe,
+    // Ticking a piece records the day, so the client history can tell on-time deliveries.
+    hecha_en: p.hecha === undefined ? undefined : p.hecha ? (p.hechaEn ?? hoyLocal()) : null,
   };
   Object.entries(row).forEach(([k, v]) => v === undefined && delete (row as Record<string, unknown>)[k]);
   return row;
+}
+
+/** Today as "yyyy-MM-dd" in local time. */
+function hoyLocal(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
 export async function crearPiezas(inputs: NuevaPiezaInput[]): Promise<void> {
   if (inputs.length === 0) return;
   // A bulk insert sends the union of all keys and fills missing ones with null,
   // which would override column defaults, so spell the defaults out per row.
-  const rows = inputs.map((i) => (({ ...piezaToRow(i), estado: i.estado ?? "idea", guion_listo: i.guionListo ?? false, tanda: i.tanda ?? 1 })));
+  const rows = inputs.map((i) => ({ ...piezaToRow(i), hecha: i.hecha ?? false, guion_listo: i.guionListo ?? false, tanda: i.tanda ?? 1 }));
   const { error } = await supabase().from("piezas").insert(rows);
   if (error) throw error;
 }
 
-/** Tick a piece forward (or back): this is the single write that makes the whole
+/** Open a delivery cycle: its row, then its pieces. The row's id is the client
+ * and the delivery, so when two devices open the same cycle at once only the
+ * first insert lands, and only that one writes the pieces. */
+export async function abrirCiclo(ciclo: Ciclo, piezas: NuevaPiezaInput[]): Promise<boolean> {
+  const { data, error } = await supabase()
+    .from("ciclos")
+    .upsert({ id: ciclo.id, cliente_id: ciclo.clienteId, entrega: ciclo.entrega }, { onConflict: "id", ignoreDuplicates: true })
+    .select("id");
+  if (error) throw error;
+  if (!data || data.length === 0) return false;
+  try {
+    await crearPiezas(piezas);
+  } catch (e) {
+    // A cycle with no pieces reads as finished: take it back so it opens again.
+    await supabase().from("ciclos").delete().eq("id", ciclo.id);
+    throw e;
+  }
+  return true;
+}
+
+/** Tick a piece done (or back): this is the single write that makes the whole
  * plan re-derive, since nothing else stores "the plan". */
 export async function actualizarPieza(
   id: string,
@@ -665,6 +638,19 @@ export async function actualizarPiezas(
   if (ids.length === 0) return;
   const { error } = await supabase().from("piezas").update(piezaToRow(changes)).in("id", ids);
   if (error) throw error;
+}
+
+/** Move a client's delivery to another date: every piece due that day goes with
+ * it. Returns the ids it moved, which is what undoing it needs. */
+export async function moverEntrega(clienteId: string, desde: string, hasta: string): Promise<string[]> {
+  const { data, error } = await supabase()
+    .from("piezas")
+    .update({ fecha_entrega: hasta })
+    .eq("cliente_id", clienteId)
+    .eq("fecha_entrega", desde)
+    .select("id");
+  if (error) throw error;
+  return (data ?? []).map((r: { id: string }) => r.id);
 }
 
 export async function eliminarPieza(id: string): Promise<void> {
@@ -731,11 +717,12 @@ export async function guardarChequeoAds(
   clienteId: string,
   fecha: string,
   estado: AdsEstado,
+  /** Left out, the note already written that day is kept. An empty one clears it. */
   nota?: string,
 ): Promise<void> {
-  const { error } = await supabase()
-    .from("ads_chequeos")
-    .upsert({ id: `${fecha}__${clienteId}`, cliente_id: clienteId, fecha, estado, nota: nota ?? null });
+  const row: Record<string, unknown> = { id: `${fecha}__${clienteId}`, cliente_id: clienteId, fecha, estado };
+  if (nota !== undefined) row.nota = nota.trim() || null;
+  const { error } = await supabase().from("ads_chequeos").upsert(row);
   if (error) throw error;
 }
 

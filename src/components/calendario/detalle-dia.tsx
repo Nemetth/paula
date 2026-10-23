@@ -79,8 +79,8 @@ export function DetalleDia({
             <span className="min-w-0 flex-1">
               <span className="font-medium">{g.nombre}:</span>
               <span className="text-texto-secundario"> {g.resumen}</span>
-              {g.asignaciones.some((a) => a.unidad.provisoria) && (
-                <span className="text-texto-secundario"> (provisorio)</span>
+              {g.asignaciones.some((a) => a.sobrecarga) && (
+                <span className="font-medium text-acento-texto"> (sobrecarga)</span>
               )}
             </span>
           </li>

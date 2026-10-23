@@ -7,8 +7,10 @@ import { es } from "date-fns/locale";
 import {
   AlertTriangle,
   ArrowRight,
+  CheckCheck,
   ChevronDown,
   FileText,
+  Flame,
   Moon,
   PackageCheck,
   Presentation,
@@ -21,24 +23,24 @@ import {
   TareaHecha,
   ensureSettings,
   guardarChequeoAds,
+  marcarDiaCumplido,
   marcarFijo,
   posponerUnidades,
   quitarChequeoAds,
   quitarPospuesta,
   useAdsChequeos,
+  useDiasCumplidos,
   useFijosHechos,
   useTareasHechas,
 } from "@/lib/supabase/data";
-import { usePlan } from "@/lib/supabase/use-plan";
-import { useAvisos } from "@/lib/supabase/use-avisos";
+import { useAvisos, usePlan } from "@/lib/supabase/use-plan";
 import { Asignacion, fmtPiezas, sugerirAdelanto } from "@/lib/domain/planner";
-import { ItemHoy, armarHoy } from "@/lib/domain/hoy";
+import { ItemHoy, armarHoy, estadoDelDia, racha, resumenDelDia } from "@/lib/domain/hoy";
 import { completarUnidad, deshacerHecha, sePuedeTildar } from "@/lib/domain/completar";
 import { fechaCorta, fromISODate, toISODate } from "@/lib/domain/dates";
-import { cobrosVencidos } from "@/lib/domain/cobros";
 import { reportesDelMes } from "@/lib/domain/ads";
 import { colorCliente } from "@/lib/domain/calendario";
-import { Client, topeDelDia } from "@/lib/domain/types";
+import { Client, diasDeTrabajo, topeDelDia } from "@/lib/domain/types";
 import { NOMBRE, bajadaDelDia, fraseDelAvance, saludo } from "@/lib/domain/voz";
 import { DisruptionSheet } from "@/components/disruption-sheet";
 import { Cargando, EmptyState } from "@/components/empty-state";
@@ -63,6 +65,8 @@ export default function HoyPage() {
   const [avisosAbiertos, setAvisosAbiertos] = useState(false);
   const [adelantarAbierto, setAdelantarAbierto] = useState(false);
   const [locales, setLocales] = useState<Set<string>>(new Set());
+  /** `null` = not selecting: a tap ticks one row. Otherwise taps pick rows to tick together. */
+  const [seleccion, setSeleccion] = useState<Set<string> | null>(null);
   const [aviso, setAviso] = useState<AvisoDeshacer | null>(null);
   const [error, setError] = useState<string | null>(null);
   const avisoId = useRef(0);
@@ -71,7 +75,9 @@ export default function HoyPage() {
   const fijosHechos = useFijosHechos(todayISO);
   const registros = useTareasHechas(todayISO);
   const chequeos = useAdsChequeos();
-  const { alertas, mensajes } = useAvisos(ctx);
+  const diasCumplidos = useDiasCumplidos();
+  const avisos = useAvisos();
+  const { alertas, mensajes } = avisos;
 
   useEffect(() => {
     ensureSettings();
@@ -101,7 +107,16 @@ export default function HoyPage() {
   });
   const capacidad = carga?.capacidad ?? 0;
   const pct = hoy.total === 0 ? 0 : Math.round((hoy.hechas / hoy.total) * 100);
-  const completo = hoy.total > 0 && hoy.hechas === hoy.total;
+  const estado = estadoDelDia(hoy, carga);
+  const frase = fraseDelAvance(estado, hoy);
+  const bajada = estado.tipo === "en-curso" ? resumenDelDia(hoy, clients, ctx.entregas) : bajadaDelDia(estado, hoy);
+  const cumplidoHoy = estado.tipo === "completo" || estado.tipo === "completo-con-atrasos";
+  const diasRacha = diasCumplidos
+    ? racha(cumplidoHoy ? new Set([...diasCumplidos, todayISO]) : diasCumplidos, diasDeTrabajo(estructura), today)
+    : 0;
+  // Logged ticks are always done, so pending rows are the plan's, the Ads checks and the fijos.
+  const seleccionables = hoy.items.filter((i) => !i.hecha);
+  const listas = mensajes.filter((m) => m.tipo === "entrega-lista");
 
   // A day's worth of upcoming work, in case today goes faster than planned.
   const adelantar = sugerirAdelanto(plan, todayISO, Math.max(capacidad, topeDelDia(estructura, today.getDay()))).filter(
@@ -112,21 +127,15 @@ export default function HoyPage() {
   const hayDatos = clients.some((c) => c.activo);
   const nombres = new Map(clients.map((c) => [c.id, c.nombre]));
 
-  const vencidos = cobrosVencidos(ctx.cobros, clients, today).length;
+  const vencidos = avisos.cobrosVencidos.length;
   const reportesAtrasados = reportesDelMes(clients, ctx.reportes, today).filter((r) => r.atrasado).length;
   const correrEntrega = mensajes.filter((m) => m.tipo === "correr-entrega");
-  const hayPendiente = hoy.atrasadas.length > 0 || vencidos > 0 || reportesAtrasados > 0;
-
-  const motivoBloqueo =
-    carga?.bloqueo === "grabacion"
-      ? "Hoy es día de grabación: el día entero queda bloqueado."
-      : carga?.bloqueo === "viaje"
-        ? "Hoy es día de viaje: no hay lugar para producir."
-        : carga?.bloqueo === "no-trabajo"
-          ? "Hoy marcaste que no trabajás."
-          : carga?.bloqueo === "libre-semana"
-            ? "Hoy es un día libre en tu semana."
-            : null;
+  const hayPendiente = hoy.atrasadas.length > 0 || correrEntrega.length > 0 || vencidos > 0 || reportesAtrasados > 0;
+  /** The bell's list, in Hoy's words: alerts first, then the messages to send. */
+  const lineasAviso = [
+    ...alertas.map((a) => ({ id: a.id, texto: a.mensaje, href: a.href })),
+    ...mensajes.map((m) => ({ id: m.id, texto: `Mensaje para mandar: ${m.titulo} · ${m.cliente.nombre}`, href: `/clientes/${m.cliente.id}` })),
+  ];
 
   async function seguro(accion: () => Promise<unknown>) {
     setError(null);
@@ -150,7 +159,7 @@ export default function HoyPage() {
     setLocales((prev) => new Set(prev).add(id));
     void seguro(async () => {
       try {
-        const hecha = await completarUnidad(a.unidad, { piezas, clients });
+        const hecha = await completarUnidad(a.unidad, { clients });
         mostrarAviso(`Hecha: ${a.unidad.etiqueta}`, () => {
           quitarLocal(id);
           void seguro(() => deshacerHecha(hecha));
@@ -175,7 +184,59 @@ export default function HoyPage() {
     void seguro(() => deshacerHecha(r));
   }
 
+  /** Tick every selected row at once, with one undo for all of them. */
+  function tildarVarias(claves: Set<string>) {
+    const elegidas = seleccionables.filter((i) => claves.has(i.clave));
+    const unidades = elegidas.flatMap((i) => (i.tipo === "unidad" ? [i.asignacion.unidad.id] : []));
+    setSeleccion(null);
+    setLocales((prev) => new Set([...prev, ...unidades]));
+    void seguro(async () => {
+      const deshacer: (() => Promise<unknown>)[] = [];
+      try {
+        for (const i of elegidas) {
+          if (i.tipo === "unidad") {
+            const h = await completarUnidad(i.asignacion.unidad, { clients });
+            deshacer.push(() => deshacerHecha(h));
+          } else if (i.tipo === "ads") {
+            await guardarChequeoAds(i.cliente.id, todayISO, "ok");
+            deshacer.push(() => quitarChequeoAds(i.cliente.id, todayISO));
+          } else if (i.tipo === "fijo") {
+            await marcarFijo(todayISO, i.fijo.id, true);
+            deshacer.push(() => marcarFijo(todayISO, i.fijo.id, false));
+          }
+        }
+      } finally {
+        mostrarAviso(`${deshacer.length} ${deshacer.length === 1 ? "hecha" : "hechas"}`, () => {
+          unidades.forEach(quitarLocal);
+          void seguro(() => Promise.all(deshacer.map((f) => f())));
+        });
+      }
+    });
+  }
+
+  /** While selecting, a row's tap picks it instead of ticking it. */
+  const selector = (item: ItemHoy) =>
+    seleccion && !item.hecha
+      ? {
+          elegida: seleccion.has(item.clave),
+          onElegir: () =>
+            setSeleccion((s) => {
+              const next = new Set(s ?? []);
+              if (next.has(item.clave)) next.delete(item.clave);
+              else next.add(item.clave);
+              return next;
+            }),
+        }
+      : undefined;
+
   const filaDe = (item: ItemHoy): React.ReactNode => {
+    const eleccion = selector(item);
+    if (eleccion) {
+      const titulo =
+        item.tipo === "unidad" ? item.asignacion.unidad.etiqueta : item.tipo === "ads" ? "Chequeo de Ads" : item.tipo === "fijo" ? item.fijo.nombre : "";
+      const clienteId = item.tipo === "unidad" ? item.asignacion.unidad.clienteId : item.tipo === "ads" ? item.cliente.id : undefined;
+      return <FilaHoy hecha={false} titulo={titulo} cliente={clienteDe(clients, clienteId)} onTildar={() => undefined} eleccion={eleccion} />;
+    }
     switch (item.tipo) {
       case "unidad": {
         const a = item.asignacion;
@@ -242,7 +303,7 @@ export default function HoyPage() {
         arriba={format(today, "EEEE d 'de' MMMM", { locale: es })}
         titulo={saludo(today)}
         nombre={NOMBRE}
-        bajada={motivoBloqueo ? undefined : bajadaDelDia(hoy)}
+        bajada={bajada}
         derecha={
           <Link
             href="/ajustes"
@@ -254,7 +315,7 @@ export default function HoyPage() {
         }
       />
 
-      {alertas.length > 0 && (
+      {avisos.total > 0 && (
         <section className="entra mb-4" style={indice(1)}>
           <button
             onClick={() => setAvisosAbiertos((v) => !v)}
@@ -263,9 +324,9 @@ export default function HoyPage() {
           >
             <AlertTriangle size={16} className="shrink-0 text-ambar" />
             <span className="shrink-0 font-semibold">
-              {alertas.length === 1 ? "1 aviso" : `${alertas.length} avisos`}
+              {avisos.total === 1 ? "1 aviso" : `${avisos.total} avisos`}
             </span>
-            {!avisosAbiertos && <span className="min-w-0 flex-1 truncate text-texto-secundario">{alertas[0].mensaje}</span>}
+            {!avisosAbiertos && <span className="min-w-0 flex-1 truncate text-texto-secundario">{lineasAviso[0].texto}</span>}
             <ChevronDown
               size={16}
               className={cn(
@@ -276,20 +337,20 @@ export default function HoyPage() {
           </button>
           {avisosAbiertos && (
             <ul className="mt-2 flex flex-col gap-1.5">
-              {alertas.slice(0, 6).map((a, i) => (
+              {lineasAviso.slice(0, 6).map((a, i) => (
                 <li key={a.id} className="desliza" style={indice(i)}>
                   {a.href ? (
                     <Link href={a.href} className="tocable block rounded-[12px] bg-ambar/10 px-4 py-2.5 text-[0.9375rem]">
-                      {a.mensaje}
+                      {a.texto}
                     </Link>
                   ) : (
-                    <p className="rounded-[12px] bg-ambar/10 px-4 py-2.5 text-[0.9375rem]">{a.mensaje}</p>
+                    <p className="rounded-[12px] bg-ambar/10 px-4 py-2.5 text-[0.9375rem]">{a.texto}</p>
                   )}
                 </li>
               ))}
-              {alertas.length > 6 && (
+              {lineasAviso.length > 6 && (
                 <li className="px-1 text-[0.8125rem] text-texto-secundario">
-                  y {alertas.length - 6} más en la campanita
+                  y {lineasAviso.length - 6} más en la campanita
                 </li>
               )}
             </ul>
@@ -301,7 +362,9 @@ export default function HoyPage() {
         <div className="flex items-end justify-between gap-3">
           <div>
             <p className="text-[0.8125rem] font-medium text-sobre-oscuro/70">Lo de hoy</p>
-            {hoy.total === 0 ? (
+            {estado.tipo === "bloqueado" ? (
+              <p className="titulo text-[1.5rem] leading-tight">{estado.titulo}</p>
+            ) : estado.tipo === "libre" ? (
               <p className="titulo text-[1.5rem] leading-tight">Nada por hacer</p>
             ) : (
               <p key={hoy.hechas} className="numeros pop titulo text-[2rem] leading-tight">
@@ -310,39 +373,63 @@ export default function HoyPage() {
               </p>
             )}
           </div>
-          {hoy.total > 0 && !completo && <p className="numeros titulo text-[1.25rem] text-acento">{pct}%</p>}
+          {estado.tipo === "en-curso" && <p className="numeros titulo text-[1.25rem] text-acento">{pct}%</p>}
         </div>
-        {completo && (
+        {estado.tipo === "completo" && (
           <Sello
             texto="DÍA · CUMPLIDO · BIEN · HECHO ·"
             className="sello-cae pointer-events-none absolute -top-3 right-3 h-[92px] w-[92px] text-acento"
           />
         )}
-        <div
-          className="barra mt-3.5"
-          role="progressbar"
-          aria-valuemin={0}
-          aria-valuemax={hoy.total}
-          aria-valuenow={hoy.hechas}
-          aria-label="Avance del día"
-        >
-          <div className="barra-relleno" style={{ width: `${pct}%` }} />
-        </div>
-        <p key={fraseDelAvance(hoy)} className="aparece mt-3 text-[0.9375rem] font-medium leading-snug">
-          {fraseDelAvance(hoy)}
+        {estado.tipo !== "libre" && hoy.total > 0 && (
+          <div
+            className="barra mt-3.5"
+            role="progressbar"
+            aria-valuemin={0}
+            aria-valuemax={hoy.total}
+            aria-valuenow={hoy.hechas}
+            aria-label="Avance del día"
+          >
+            <div className="barra-relleno" style={{ width: `${pct}%` }} />
+          </div>
+        )}
+        <p key={frase} className="aparece mt-3 text-[0.9375rem] font-medium leading-snug">
+          {frase}
         </p>
-        <p className="mt-0.5 text-[0.8125rem] text-sobre-oscuro/65">
-          {capacidad > 0
-            ? `Tope de hoy: ${fmtPiezas(capacidad)} ${capacidad === 1 ? "pieza" : "piezas"}` +
-              (carga?.semaforo === "sobrecargado" ? " · te pasás, empezá por lo de arriba" : "")
-            : "Hoy no hay piezas en el plan"}
-        </p>
+        {estado.tipo === "bloqueado" && hoy.total > 0 && (
+          <p className="numeros mt-0.5 text-[0.8125rem] text-sobre-oscuro/65">
+            Quedan los fijos y chequeos de todos los días: {hoy.hechas} de {hoy.total} hechos.
+          </p>
+        )}
+        {estado.tipo !== "bloqueado" && capacidad > 0 && (
+          <p className="mt-0.5 text-[0.8125rem] text-sobre-oscuro/65">
+            {`Tope de hoy: ${fmtPiezas(capacidad)} ${capacidad === 1 ? "pieza" : "piezas"}` +
+              (carga?.semaforo === "sobrecargado" ? " · hoy te pasás del tope, empezá por lo de arriba" : "")}
+          </p>
+        )}
+        {diasRacha >= 2 && (
+          <p className="mt-2 flex items-center gap-1.5 text-[0.8125rem] font-medium text-sobre-oscuro/80">
+            <Flame size={14} className="text-acento" /> {diasRacha} días seguidos al día
+          </p>
+        )}
       </section>
+      {cumplidoHoy && hoy.total > 0 && diasCumplidos && !diasCumplidos.has(todayISO) && (
+        <RegistrarDiaCumplido fecha={todayISO} />
+      )}
 
       {error && <p className="mb-3 text-center text-[0.8125rem] text-[var(--color-error)]">{error}</p>}
 
-      {motivoBloqueo && (
-        <p className="papel entra mb-5 px-4 py-3 text-center text-[0.9375rem] text-texto-secundario">{motivoBloqueo}</p>
+      {listas.length > 0 && (
+        <section className="entra mb-5" style={indice(3)}>
+          <h2 className="titulo mb-0.5 flex items-center justify-center gap-2 text-[1.125rem]">
+            <PackageCheck size={18} className="text-verde" />
+            {listas.length === 1 ? "Terminaste una entrega" : `Terminaste ${listas.length} entregas`}
+          </h2>
+          <p className="mb-3 text-center text-[0.8125rem] text-texto-secundario">
+            Ya se abrió el ciclo siguiente. Avisale al cliente que está lista.
+          </p>
+          <MensajesPendientes mensajes={listas} />
+        </section>
       )}
 
       {hitosHoy.length > 0 && (
@@ -363,7 +450,7 @@ export default function HoyPage() {
       )}
 
       {hoy.items.length === 0 ? (
-        <EmptyState
+        estado.tipo === "bloqueado" ? null : <EmptyState
           sol={hayDatos}
           title={hayDatos ? "Vas bien — nada para producir hoy" : "Todavía no hay clientes cargados"}
           detail={
@@ -374,6 +461,33 @@ export default function HoyPage() {
         />
       ) : (
         <section className="entra" style={indice(4)}>
+          {seleccionables.length >= 2 && (
+            <div className="mb-1.5 flex justify-end gap-2">
+              {seleccion ? (
+                <>
+                  <button
+                    onClick={() => setSeleccion(new Set(seleccionables.map((i) => i.clave)))}
+                    className="tocable rounded-[10px] px-3 py-1.5 text-[0.8125rem] font-medium text-acento-texto"
+                  >
+                    Todas
+                  </button>
+                  <button
+                    onClick={() => setSeleccion(null)}
+                    className="tocable rounded-[10px] border border-borde px-3 py-1.5 text-[0.8125rem] font-medium hover:bg-borde/40"
+                  >
+                    Cancelar
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={() => setSeleccion(new Set())}
+                  className="tocable flex items-center gap-1.5 rounded-[10px] border border-borde px-3 py-1.5 text-[0.8125rem] font-medium text-texto-secundario hover:bg-borde/40"
+                >
+                  <CheckCheck size={14} /> Tildar varias
+                </button>
+              )}
+            </div>
+          )}
           <ul className="papel flex flex-col divide-y divide-borde/70 p-1.5">
             {hoy.items.map((item, i) => (
               <li key={item.clave} className="desliza" style={indice(i)}>
@@ -381,9 +495,24 @@ export default function HoyPage() {
               </li>
             ))}
           </ul>
-          <p className="mt-2 text-center text-[0.75rem] text-texto-secundario">
-            Deslizá a la derecha para tildar, a la izquierda para pasarla a mañana.
-          </p>
+          {seleccion ? (
+            <div className="aviso-sube sticky bottom-[calc(96px+env(safe-area-inset-bottom,0px))] z-30 mt-3 flex items-center gap-3 rounded-[16px] bg-bg-elevada p-2 pl-4 shadow-[var(--shadow-papel-alto)] lg:bottom-6">
+              <span className="numeros flex-1 text-[0.9375rem] font-medium">
+                {seleccion.size === 0 ? "Elegí las que hiciste" : `${seleccion.size} ${seleccion.size === 1 ? "elegida" : "elegidas"}`}
+              </span>
+              <button
+                disabled={seleccion.size === 0}
+                onClick={() => tildarVarias(seleccion)}
+                className="boton-primario tocable rounded-[12px] px-4 py-2 text-[0.9375rem] font-medium disabled:opacity-50"
+              >
+                Marcar hechas
+              </button>
+            </div>
+          ) : (
+            <p className="mt-2 text-center text-[0.75rem] text-texto-secundario">
+              Deslizá a la derecha para tildar, a la izquierda para pasarla a mañana.
+            </p>
+          )}
         </section>
       )}
 
@@ -523,6 +652,7 @@ export default function HoyPage() {
         tareasHoy={plan.asignaciones.filter((a) => a.fecha === todayISO)}
         tareasProximas={proximas.filter((a) => sePuedeTildar(a.unidad))}
         grabacionesPendientes={grabaciones.filter((g) => !g.hecha)}
+        entregas={ctx.entregas}
       />
 
       <AvisoDeshacerToast aviso={aviso} onCerrar={cerrarAviso} />
@@ -549,12 +679,20 @@ function DetalleUnidad({ a, hoyISO }: { a: Asignacion; hoyISO: string }) {
       {atrasada && (
         <span className="rounded-[8px] bg-acento/35 px-1.5 py-0.5 font-medium text-acento-texto">atrasada</span>
       )}
-      {enMargen && <span className="rounded-[8px] bg-ambar/15 px-1.5 py-0.5 font-medium text-ambar">usa el margen</span>}
-      {unidad.provisoria && (
-        <span className="rounded-[8px] bg-borde/60 px-1.5 py-0.5 font-medium">provisoria: falta grabar</span>
+      {a.sobrecarga && (
+        <span className="rounded-[8px] bg-acento/35 px-1.5 py-0.5 font-medium text-acento-texto">sobrecarga</span>
       )}
+      {enMargen && <span className="rounded-[8px] bg-ambar/15 px-1.5 py-0.5 font-medium text-ambar">usa el margen</span>}
     </>
   );
+}
+
+/** Writes today into the streak once everything is done. Rendered only then. */
+function RegistrarDiaCumplido({ fecha }: { fecha: string }) {
+  useEffect(() => {
+    marcarDiaCumplido(fecha).catch((e) => console.error("[dias_cumplidos]", e));
+  }, [fecha]);
+  return null;
 }
 
 /** One line of the day: tick, what it is, whose it is, and the slide-to-act. */
@@ -566,6 +704,7 @@ function FilaHoy({
   onTildar,
   onDeshacer,
   onManana,
+  eleccion,
 }: {
   hecha: boolean;
   titulo: string;
@@ -574,7 +713,26 @@ function FilaHoy({
   onTildar: () => void;
   onDeshacer?: () => void;
   onManana?: () => void;
+  /** "Tildar varias": the row is picked instead of ticked. */
+  eleccion?: { elegida: boolean; onElegir: () => void };
 }) {
+  if (eleccion) {
+    return (
+      <label className={cn("tocable flex cursor-pointer items-center gap-3 rounded-[12px] px-2.5 py-3", eleccion.elegida && "bg-acento/15")}>
+        <input
+          type="checkbox"
+          checked={eleccion.elegida}
+          onChange={eleccion.onElegir}
+          aria-label={`Elegir ${titulo}`}
+          className="h-[20px] w-[20px] shrink-0 accent-[var(--color-oscuro)]"
+        />
+        <span className="min-w-0 flex-1">
+          {cliente && <span className="block truncate text-[0.8125rem] font-medium text-texto-secundario">{cliente.nombre}</span>}
+          <span className="block font-medium leading-snug">{titulo}</span>
+        </span>
+      </label>
+    );
+  }
   return (
     <FilaDeslizable onHecha={hecha ? undefined : onTildar} onManana={hecha ? undefined : onManana}>
       <div className={cn("flex items-start gap-3 px-2.5 py-3 transition-opacity", hecha && "opacity-55")}>

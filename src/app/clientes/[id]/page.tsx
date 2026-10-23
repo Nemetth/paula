@@ -3,31 +3,23 @@
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, Pencil, Trash2, MessageCircle } from "lucide-react";
-import { useMemo, useState } from "react";
-import {
-  actualizarCliente,
-  eliminarCliente,
-  useAdsChequeos,
-  useClients,
-  useCobros,
-  useGrabaciones,
-  useIdeas,
-  usePiezas,
-} from "@/lib/supabase/data";
+import { useState } from "react";
+import { actualizarCliente, eliminarCliente, useAdsChequeos, useIdeas } from "@/lib/supabase/data";
 import { ClienteForm, clienteFormValuesToInput, errorMessage } from "@/components/cliente-form";
-import { SeccionCiclo, SeccionGrabaciones, SeccionPiezas } from "@/components/ficha/piezas-grabaciones";
+import { SeccionGrabaciones, SeccionHistorial, SeccionPiezas } from "@/components/ficha/piezas-grabaciones";
 import {
-  SeccionAds,
-  SeccionHistorial,
+  PanelAds,
+  PanelPlata,
   SeccionIdeas,
   SeccionMensajes,
+  SeccionNotas,
   SeccionReunion,
 } from "@/components/ficha/otras";
-import { toISODate } from "@/lib/domain/dates";
+import { Paneles } from "@/components/ficha/paneles";
 import { usePlan } from "@/lib/supabase/use-plan";
 import { EntregaActual } from "@/components/ficha/entrega-actual";
 import { ESTADO_CLIENTE_LABEL, TIPO_CLIENTE_LABEL } from "@/lib/domain/labels";
-import { ClienteEstado } from "@/lib/domain/types";
+import { ClienteEstado, grabaDe } from "@/lib/domain/types";
 import { Cargando, EmptyState } from "@/components/empty-state";
 import { Encabezado } from "@/components/encabezado";
 import { BotonPrimario, Sheet } from "@/components/sheet";
@@ -39,18 +31,14 @@ export default function ClienteDetailPage() {
   const [eliminando, setEliminando] = useState(false);
   const [errorAccion, setErrorAccion] = useState<string | null>(null);
   const [borrando, setBorrando] = useState(false);
-  const hoyISO = useMemo(() => toISODate(new Date()), []);
 
-  const clients = useClients();
-  const todasLasPiezas = usePiezas();
-  const todasLasGrabaciones = useGrabaciones();
   const ideas = useIdeas();
   const chequeos = useAdsChequeos();
-  const cobros = useCobros();
   const ctx = usePlan();
-  const cliente = clients?.find((c) => c.id === id);
+  const cliente = ctx?.clients.find((c) => c.id === id);
 
-  if (clients === undefined) return <Cargando />;
+  if (!ctx) return <Cargando />;
+  const hoyISO = ctx.todayISO;
   if (!cliente) {
     return (
       <div className="mx-auto max-w-[640px] px-4 pt-2 lg:max-w-[720px] lg:px-8 lg:pt-4">
@@ -75,8 +63,10 @@ export default function ClienteDetailPage() {
     );
   }
 
-  const piezas = (todasLasPiezas ?? []).filter((p) => p.clienteId === id);
-  const grabaciones = (todasLasGrabaciones ?? []).filter((g) => g.clienteId === id);
+  const piezas = ctx.piezas.filter((p) => p.clienteId === id);
+  const grabaciones = ctx.grabaciones.filter((g) => g.clienteId === id);
+  const entregas = ctx.entregas.filter((e) => e.clienteId === id);
+  const hace = cliente.servicio !== "ads";
 
   if (editando) {
     return (
@@ -138,7 +128,7 @@ export default function ClienteDetailPage() {
             {errorAccion}
           </p>
         )}
-        <div className="mb-8 flex flex-wrap items-center justify-center gap-2">
+        <div className="mb-5 flex flex-wrap items-center justify-center gap-2">
           <select
             value={cliente.estado}
             onChange={(e) => {
@@ -181,31 +171,51 @@ export default function ClienteDetailPage() {
           )}
         </div>
 
-        {cliente.servicio !== "ads" && (
-          <>
-            {ctx && <EntregaActual cliente={cliente} entregas={ctx.entregas.filter((e) => e.clienteId === cliente.id)} />}
-            <SeccionCiclo
-              piezas={piezas}
-              grabaciones={grabaciones}
-              cliente={cliente}
-              todasLasPiezas={todasLasPiezas ?? []}
-            />
-            <SeccionPiezas cliente={cliente} piezas={piezas} grabaciones={grabaciones} />
-            <SeccionGrabaciones cliente={cliente} grabaciones={grabaciones} piezas={piezas} />
-          </>
-        )}
-        <SeccionAds cliente={cliente} chequeos={chequeos ?? []} hoyISO={hoyISO} />
-        {cliente.servicio !== "ads" && <SeccionIdeas cliente={cliente} ideas={ideas ?? []} />}
-        <SeccionReunion cliente={cliente} piezas={piezas} grabaciones={grabaciones} cobros={cobros ?? []} />
-        {cliente.servicio !== "ads" && <SeccionHistorial piezas={piezas} grabaciones={grabaciones} />}
-        <SeccionMensajes cliente={cliente} grabaciones={grabaciones} hoyISO={hoyISO} />
-
-        {cliente.notas && (
-          <section className="mb-6">
-            <h2 className="mb-2 text-[0.9375rem] font-semibold">Notas</h2>
-            <p className="text-[0.9375rem] text-texto-secundario">{cliente.notas}</p>
-          </section>
-        )}
+        <Paneles
+          key={cliente.id}
+          inicial={hace ? 0 : 1}
+          paneles={[
+            {
+              id: "contenido",
+              titulo: "Contenido",
+              contenido: hace ? (
+                <>
+                  <EntregaActual cliente={cliente} entregas={entregas} />
+                  <SeccionPiezas piezas={piezas} entregas={entregas} />
+                  {(grabaDe(cliente) || grabaciones.length > 0) && (
+                    <SeccionGrabaciones cliente={cliente} grabaciones={grabaciones} piezas={piezas} />
+                  )}
+                  <SeccionIdeas cliente={cliente} ideas={ideas ?? []} />
+                  <SeccionHistorial entregas={entregas} />
+                </>
+              ) : (
+                <EmptyState
+                  title="Solo Ads"
+                  detail="Este cliente no tiene contenido. Si empieza, cambiale el servicio desde Clientes y se genera su primera entrega."
+                />
+              ),
+            },
+            { id: "ads", titulo: "Ads", contenido: <PanelAds cliente={cliente} chequeos={chequeos ?? []} hoyISO={hoyISO} /> },
+            {
+              id: "plata",
+              titulo: "Plata",
+              contenido: (
+                <PanelPlata cliente={cliente} cobros={ctx.cobros} piezas={piezas} entregas={entregas} today={ctx.today} />
+              ),
+            },
+            {
+              id: "notas",
+              titulo: "Notas",
+              contenido: (
+                <>
+                  <SeccionNotas cliente={cliente} />
+                  <SeccionReunion cliente={cliente} entregas={entregas} cobros={ctx.cobros} today={ctx.today} />
+                  <SeccionMensajes cliente={cliente} grabaciones={grabaciones} hoyISO={hoyISO} />
+                </>
+              ),
+            },
+          ]}
+        />
       </div>
 
       <Sheet open={eliminando} title={`¿Eliminar a ${cliente.nombre}?`} onClose={() => !borrando && setEliminando(false)}>

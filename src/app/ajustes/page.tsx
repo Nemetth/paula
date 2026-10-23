@@ -16,6 +16,7 @@ import {
 import { TIPO_PIEZA_LABEL } from "@/lib/domain/labels";
 import { Encabezado } from "@/components/encabezado";
 import { InstalarApp } from "@/components/instalar-app";
+import { AvisoManana } from "@/components/aviso-manana";
 
 const DIAS: { valor: number; label: string }[] = [
   { valor: 1, label: "Lunes" },
@@ -247,6 +248,8 @@ export default function AjustesPage() {
             Agregar fijo
           </button>
         </section>
+
+        <AvisoManana />
 
         <InstalarApp />
 

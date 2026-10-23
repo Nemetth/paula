@@ -4,6 +4,8 @@
 
 export type PieceType = "historia" | "posteo" | "reel";
 
+export const ORDEN_TIPOS: PieceType[] = ["historia", "posteo", "reel"];
+
 export type Servicio = "contenido" | "ads" | "ambos";
 
 export type CicloTipo =
@@ -27,6 +29,7 @@ export const FLOW_STAGES = [
 
 export type FlowStage = (typeof FLOW_STAGES)[number];
 
+/** Pieces per cycle: per month for monthly clients, per week for weekly ones. */
 export interface VolumenMensual {
   historias: number;
   posteos: number;
@@ -34,10 +37,16 @@ export interface VolumenMensual {
 }
 
 export interface FlujoConfig {
+  /** Only "mensual" and "semanal" drive the delivery cycle; anything else reads as monthly. */
   cicloTipo: CicloTipo;
+  /** Delivery day: day of the month (1-31) for monthly clients, weekday (0 = Sunday .. 6) for weekly ones. */
+  diaEntrega?: number;
+  /** Days before each delivery production starts. Defaults per cycle type (see ciclos.ts). */
+  diasAnticipacion?: number;
   mandaCalendario: boolean;
   /** Business days the client takes to approve the calendar. */
   diasAprobacion: number;
+  /** Graba: a cycle's pieces only become available once its recording is marked done. */
   tieneGrabacion: boolean;
   /** Extra travel days to add around a recording day (off-site shoots). */
   diasViajeGrabacion: number;
@@ -53,30 +62,14 @@ export interface FlujoConfig {
   diasMargenCierre: number;
   /** Length in days of one period, only used when cicloTipo === "personalizado". */
   duracionPeriodoDias?: number;
-  /** When this client's pieces can start being produced. Defaults from tieneGrabacion. */
-  inicioDesde?: InicioDesde;
-  /** Fixed start date, only used when inicioDesde === "fecha". */
-  inicioFecha?: string;
   /** Days before each delivery Paula wants the pieces finished (the "fecha objetivo"). */
   margenDias?: number;
 }
 
-/** What unlocks production for a client:
- * - aprobacion: as soon as the calendar (each piece) is approved;
- * - grabacion: the day after the recording its pieces come from;
- * - fecha: not before a fixed date. */
-export type InicioDesde = "aprobacion" | "grabacion" | "fecha";
-
 export const DEFAULT_MARGEN_DIAS = 1;
 
-export function inicioPorDefecto(flujo: FlujoConfig, tipo: ClienteTipo): InicioDesde {
-  if (flujo.inicioDesde) return flujo.inicioDesde;
-  const sinGrabacion = tipo === "material-cliente" || tipo === "pedidos-diarios" || tipo === "pack";
-  return flujo.tieneGrabacion && !sinGrabacion ? "grabacion" : "aprobacion";
-}
-
-export function inicioDe(client: Client): InicioDesde {
-  return inicioPorDefecto(client.flujo, client.tipo);
+export function grabaDe(client: Client): boolean {
+  return client.flujo.tieneGrabacion;
 }
 
 export function margenDe(client: Client): number {
@@ -112,11 +105,17 @@ export interface Client {
   intocable: boolean;
   /** Last "a fondo" Ads review (ISO date); drives the review rotation. */
   adsUltimaRevision?: string;
+  /** Direct link to the client's account in Ads Manager. */
+  adsCuentaUrl?: string;
+  adsEstadoCuenta: AdsEstadoCuenta;
+  /** Last time the ad creatives were refreshed (ISO date). */
+  adsRefreshCreativos?: string;
   /** Last price increase (ISO date); the next one is due every 3 months. */
   ultimoAumento?: string;
   notasReunion?: string;
   rubro?: string;
   servicio: Servicio;
+  /** Pieces per cycle. Named from when every client was monthly. */
   volumenMensual: VolumenMensual;
   flujo: FlujoConfig;
   contactoWhatsapp?: string;
@@ -238,27 +237,21 @@ export const HORAS_POR_PIEZA: Record<PieceType, number> = {
 
 // ---------------------------------------------------------------------------
 // Piece-based model. The unit of work is the piece (one historia, posteo or
-// reel), not the client's stage. Recordings are their own entity and can feed
-// several pieces across more than one publication period.
+// reel), not the client's stage. Each delivery is a cycle whose pieces are
+// generated from the client's volume; a piece is either done or not.
 // ---------------------------------------------------------------------------
-
-export const PIEZA_ESTADOS = [
-  "idea",
-  "aprobada",
-  "grabada",
-  "editada",
-  "entregada",
-  "programada",
-] as const;
-
-export type PiezaEstado = (typeof PIEZA_ESTADOS)[number];
 
 export interface Pieza {
   id: string;
   clienteId: string;
   tipo: PieceType;
-  estado: PiezaEstado;
+  hecha: boolean;
+  /** Day it was ticked done (ISO). Empty for pieces done before this was recorded. */
+  hechaEn?: string;
   titulo?: string;
+  /** Delivery cycle it was generated for. */
+  cicloId?: string;
+  /** Recording it comes from, when set by hand. Otherwise its cycle's recording (see grabacionDelCiclo). */
   grabacionId?: string;
   /** The script/shot prep for this piece is done (only meaningful while it waits for a recording). */
   guionListo: boolean;
@@ -266,7 +259,7 @@ export interface Pieza {
   periodoPublicacion?: string;
   /** Scheduled publication date. */
   fechaPublicacion?: string;
-  /** Explicit delivery date. When absent, derived from the recording (+7 days). */
+  /** Delivery date: its cycle's, unless the delivery was moved. */
   fechaEntrega?: string;
   /** 1 or 2: lets one delivery be split into two batches with their own date. */
   tanda: 1 | 2;
@@ -291,8 +284,13 @@ export interface Grabacion {
   notas?: string;
 }
 
-/** Days after a recording by which its pieces are delivered. */
-export const ENTREGA_DIAS_POST_GRABACION = 7;
+/** One delivery the app opened for a client, generating its pieces from the volume. */
+export interface Ciclo {
+  id: string;
+  clienteId: string;
+  /** The delivery as the cycle settings computed it. Pieces carry the real one, in case it was moved. */
+  entrega: string;
+}
 
 /** Hours per piece, split by the kind of work. */
 export interface TiempoPieza {
@@ -317,6 +315,11 @@ export interface Idea {
 }
 
 export type AdsEstado = "ok" | "revisar";
+
+export type AdsEstadoCuenta = "activa" | "pausada" | "frenada-pago";
+
+/** Alert when the creatives haven't been refreshed in this many days. */
+export const DIAS_REFRESH_CREATIVOS = 28;
 
 export interface AdsChequeo {
   id: string;

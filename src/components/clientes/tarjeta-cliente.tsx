@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { differenceInCalendarDays } from "date-fns";
 import { ChevronDown, ExternalLink } from "lucide-react";
 import {
   actualizarCliente,
@@ -10,11 +11,13 @@ import {
   crearGrabacion,
   crearOActualizarCobro,
 } from "@/lib/supabase/data";
+import { DEFAULT_ANTICIPACION, anticipacionDe, configCiclo, inicioVentana, proximaEntrega, tipoCicloDe } from "@/lib/domain/ciclos";
 import { Entrega } from "@/lib/domain/entregas";
-import { fechaCorta, toISODate } from "@/lib/domain/dates";
-import { fechaEntregaDe } from "@/lib/domain/planner";
-import { Client, Cobro, Grabacion, Pieza, Servicio, VolumenMensual, inicioDe } from "@/lib/domain/types";
-import { SEMAFORO_ENTREGA, SemaforoPunto } from "@/components/entrega";
+import { fechaCorta, fromISODate, toISODate } from "@/lib/domain/dates";
+import { ESTADO_CUENTA_ADS_LABEL } from "@/lib/domain/labels";
+import { Client, Cobro, FlujoConfig, Grabacion, Pieza, Servicio, VolumenMensual, grabaDe, margenDe } from "@/lib/domain/types";
+import { AvancePorTipo, SEMAFORO_ENTREGA, SemaforoPunto } from "@/components/entrega";
+import { DIAS_SEMANA } from "@/components/cliente-form";
 import { cn } from "@/lib/utils";
 
 const SERVICIO_LABEL: Record<Servicio, string> = {
@@ -30,9 +33,18 @@ function cantidad(n: number, uno: string, varios: string) {
   return `${n} ${n === 1 ? uno : varios}`;
 }
 
-/** One client at a glance — what Paula does for them, and the three dates that
- * drive the plan (delivery, recording, payment) — and the place to change them.
- * Every change is a source fact: the planner re-derives the rest. */
+/** "en 12 días", "mañana", "hoy", "venció hace 2 días". */
+export function diasRestantes(dias: number): string {
+  if (dias > 1) return `${dias} días`;
+  if (dias === 1) return "mañana";
+  if (dias === 0) return "hoy";
+  return dias === -1 ? "venció ayer" : `venció hace ${-dias} d`;
+}
+
+/** One client at a glance — what Paula does for them, how far along the current
+ * delivery is per piece type, and when it started and is due — and the place to
+ * change the cycle and the dates. Every change is a source fact: the planner
+ * re-derives the rest. */
 export function TarjetaCliente({
   cliente,
   color,
@@ -41,42 +53,43 @@ export function TarjetaCliente({
   grabaciones,
   cobro,
   periodo,
+  today,
 }: {
   cliente: Client;
   color: string;
+  /** The delivery being worked on (the earliest one not finished). */
   entrega?: Entrega;
   piezas: Pieza[];
   grabaciones: Grabacion[];
   cobro?: Cobro;
   /** Current month, "yyyy-MM": the cobro being edited. */
   periodo: string;
+  today: Date;
 }) {
   const [abierta, setAbierta] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [guardado, setGuardado] = useState(0);
-  const [nuevaGrabacion, setNuevaGrabacion] = useState(toISODate(new Date()));
+  const [nuevaGrabacion, setNuevaGrabacion] = useState(toISODate(today));
 
   const hace = cliente.servicio !== "ads";
   const hacePauta = cliente.servicio !== "contenido";
-  const graba = hace && inicioDe(cliente) === "grabacion";
+  const graba = hace && grabaDe(cliente);
   const v = cliente.volumenMensual;
   const pausado = !cliente.activo || cliente.estado === "en-pausa";
+  const semanal = tipoCicloDe(cliente) === "semanal";
+  const sinDia = hace && !configCiclo(cliente);
+
+  // With no pieces yet the delivery still comes from the cycle settings.
+  const fechaEntrega = entrega?.fecha ?? proximaEntrega(cliente, today);
+  const inicio = entrega?.inicio ?? (fechaEntrega ? inicioVentana(fechaEntrega, cliente) : undefined);
+  const dias = fechaEntrega ? differenceInCalendarDays(fromISODate(fechaEntrega), today) : undefined;
 
   const proximaGrabacion = grabaciones
     .filter((g) => g.clienteId === cliente.id && !g.hecha)
     .sort((a, b) => a.fecha.localeCompare(b.fecha))[0];
 
-  /** The pieces that make up the delivery being edited: the ones not handed over yet. */
-  const piezasEntrega = entrega
-    ? piezas.filter(
-        (p) =>
-          p.clienteId === cliente.id &&
-          p.estado !== "idea" &&
-          p.estado !== "entregada" &&
-          p.estado !== "programada" &&
-          fechaEntregaDe(p, grabaciones) === entrega.fecha,
-      )
-    : [];
+  /** The pieces of the delivery being edited, done or not: they move together. */
+  const piezasEntrega = entrega ? piezas.filter((p) => p.clienteId === cliente.id && p.fechaEntrega === entrega.fecha) : [];
 
   async function guardar(accion: () => Promise<unknown>) {
     setError(null);
@@ -93,11 +106,24 @@ export function TarjetaCliente({
     void guardar(() => actualizarCliente(cliente.id, { volumenMensual: { ...v, [campo]: Math.floor(valor) } }));
   }
 
-  function setGraba(si: boolean) {
-    void guardar(() =>
-      actualizarCliente(cliente.id, {
-        flujo: { ...cliente.flujo, inicioDesde: si ? "grabacion" : "aprobacion", tieneGrabacion: si },
-      }),
+  function setFlujo(cambios: Partial<FlujoConfig>) {
+    void guardar(() => actualizarCliente(cliente.id, { flujo: { ...cliente.flujo, ...cambios } }));
+  }
+
+  /** A number field that saves on blur, only when it really changed. */
+  function numero(valor: number, onGuardar: (n: number) => void, props: { min: number; max: number }) {
+    return (
+      <input
+        key={valor}
+        type="number"
+        {...props}
+        defaultValue={valor}
+        onBlur={(e) => {
+          const n = Math.floor(Number(e.target.value));
+          if (e.target.value !== "" && Number.isFinite(n) && n >= props.min && n <= props.max && n !== valor) onGuardar(n);
+        }}
+        className="input"
+      />
     );
   }
 
@@ -120,16 +146,46 @@ export function TarjetaCliente({
             {hace && (
               <span className="numeros">
                 · {cantidad(v.historias, "historia", "historias")} · {cantidad(v.posteos, "posteo", "posteos")} ·{" "}
-                {cantidad(v.reels, "reel", "reels")}
+                {cantidad(v.reels, "reel", "reels")} {semanal ? "por semana" : "por mes"}
               </span>
             )}
             {hace && <span>· {graba ? "graba" : "sin grabación"}</span>}
           </p>
-          <dl className="mt-2.5 grid grid-cols-3 gap-2 text-[0.8125rem]">
-            <FechaResumen titulo="Entrega" valor={entrega?.fecha} extra={entrega ? SEMAFORO_ENTREGA[entrega.semaforo].label : undefined} />
-            <FechaResumen titulo="Grabación" valor={proximaGrabacion?.fecha} apagado={!graba && !proximaGrabacion} />
-            <FechaResumen titulo="Cobro" valor={cobro?.fechaVencimiento} extra={cobro?.estado === "pagado" ? "Pagado" : undefined} />
-          </dl>
+
+          {hace && entrega && (
+            <div className="mt-2.5">
+              <AvancePorTipo porTipo={entrega.porTipo} compacta />
+            </div>
+          )}
+
+          {sinDia ? (
+            <p className="mt-2.5 rounded-[12px] bg-ambar/10 px-2.5 py-1.5 text-[0.8125rem] font-medium text-ambar">
+              Falta el día de entrega: sin eso no se generan las piezas ni entra al plan.
+            </p>
+          ) : hace ? (
+            <dl className="mt-2.5 grid grid-cols-3 gap-2 text-[0.8125rem]">
+              <FechaResumen
+                titulo="Entrega"
+                valor={fechaEntrega ? fechaCorta(fechaEntrega) : undefined}
+                extra={entrega ? SEMAFORO_ENTREGA[entrega.semaforo].label : undefined}
+              />
+              <FechaResumen titulo="Arranca" valor={inicio ? fechaCorta(inicio) : undefined} />
+              <FechaResumen
+                titulo="Faltan"
+                valor={dias !== undefined ? diasRestantes(dias) : undefined}
+                alerta={dias !== undefined && dias < 0}
+              />
+            </dl>
+          ) : (
+            <dl className="mt-2.5 grid grid-cols-2 gap-2 text-[0.8125rem]">
+              <FechaResumen titulo="Cuenta" valor={ESTADO_CUENTA_ADS_LABEL[cliente.adsEstadoCuenta]} />
+              <FechaResumen
+                titulo="Cobro"
+                valor={cobro ? fechaCorta(cobro.fechaVencimiento) : undefined}
+                extra={cobro?.estado === "pagado" ? "Pagado" : undefined}
+              />
+            </dl>
+          )}
         </div>
         <ChevronDown
           size={18}
@@ -166,23 +222,21 @@ export function TarjetaCliente({
                     ] as [keyof VolumenMensual, string][]
                   ).map(([campo, label]) => (
                     <label key={campo} className="flex flex-col gap-1">
-                      <span className={etiqueta}>{label} por mes</span>
-                      <input
-                        key={`${campo}-${v[campo]}`}
-                        type="number"
-                        min={0}
-                        defaultValue={v[campo]}
-                        onBlur={(e) => setVolumen(campo, Number(e.target.value))}
-                        className="input"
-                      />
+                      <span className={etiqueta}>
+                        {label} {semanal ? "por semana" : "por mes"}
+                      </span>
+                      {numero(v[campo], (n) => setVolumen(campo, n), { min: 0, max: 200 })}
                     </label>
                   ))}
                 </div>
+                <span className="-mt-1.5 text-[0.75rem] text-texto-secundario">
+                  Cuenta desde la próxima entrega: las piezas de la actual ya están generadas.
+                </span>
                 <label className="flex items-center gap-2 text-[0.9375rem]">
                   <input
                     type="checkbox"
                     checked={graba}
-                    onChange={(e) => setGraba(e.target.checked)}
+                    onChange={(e) => setFlujo({ tieneGrabacion: e.target.checked })}
                     className="h-[16px] w-[16px] accent-[var(--color-oscuro)]"
                   />
                   Graba para este cliente
@@ -192,15 +246,64 @@ export function TarjetaCliente({
             {hacePauta && <p className="text-[0.8125rem] text-texto-secundario">Incluye el chequeo diario de Ads.</p>}
           </section>
 
+          {hace && (
+            <section className="flex flex-col gap-3">
+              <h3 className="titulo text-[1rem]">Ciclo</h3>
+              <div className="grid grid-cols-2 gap-3">
+                <label className="flex flex-col gap-1">
+                  <span className={etiqueta}>Entrega</span>
+                  <select
+                    value={semanal ? "semanal" : "mensual"}
+                    onChange={(e) => setFlujo({ cicloTipo: e.target.value as "mensual" | "semanal", diaEntrega: undefined, diasAnticipacion: undefined })}
+                    className="input"
+                  >
+                    <option value="mensual">Por mes</option>
+                    <option value="semanal">Por semana</option>
+                  </select>
+                </label>
+                <label className="flex flex-col gap-1">
+                  <span className={etiqueta}>{semanal ? "Qué día" : "Día del mes"}</span>
+                  {semanal ? (
+                    <select
+                      value={cliente.flujo.diaEntrega ?? ""}
+                      onChange={(e) => e.target.value !== "" && setFlujo({ diaEntrega: Number(e.target.value) })}
+                      className="input"
+                    >
+                      <option value="">Elegí</option>
+                      {DIAS_SEMANA.map(([n, nombre]) => (
+                        <option key={n} value={n}>
+                          {nombre}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    numero(cliente.flujo.diaEntrega ?? 0, (n) => setFlujo({ diaEntrega: n }), { min: 1, max: 31 })
+                  )}
+                </label>
+                <label className="flex flex-col gap-1">
+                  <span className={etiqueta}>Arranca días antes</span>
+                  {numero(anticipacionDe(cliente), (n) => setFlujo({ diasAnticipacion: n }), { min: 0, max: 60 })}
+                </label>
+                <label className="flex flex-col gap-1">
+                  <span className={etiqueta}>Margen (días)</span>
+                  {numero(margenDe(cliente), (n) => setFlujo({ margenDias: n }), { min: 0, max: 30 })}
+                </label>
+              </div>
+              <span className="text-[0.75rem] text-texto-secundario">
+                Por defecto arranca {DEFAULT_ANTICIPACION[semanal ? "semanal" : "mensual"]} días antes. Las piezas se reparten
+                parejas entre el arranque y la entrega menos el margen.
+              </span>
+            </section>
+          )}
+
           <section className="flex flex-col gap-3">
             <h3 className="titulo text-[1rem]">Fechas</h3>
 
-            {hace && (
+            {hace && entrega && (
               <label className="flex flex-col gap-1">
-                <span className={etiqueta}>Entrega</span>
+                <span className={etiqueta}>Mover esta entrega</span>
                 <CampoFecha
-                  valor={entrega?.fecha}
-                  disabled={piezasEntrega.length === 0}
+                  valor={entrega.fecha}
                   onGuardar={(fecha) =>
                     void guardar(() =>
                       actualizarPiezas(
@@ -211,14 +314,12 @@ export function TarjetaCliente({
                   }
                 />
                 <span className="text-[0.75rem] text-texto-secundario">
-                  {piezasEntrega.length === 0
-                    ? "Sin piezas aprobadas para entregar: cargalas en la ficha."
-                    : `Mueve las ${piezasEntrega.length} piezas de esta entrega y el plan se recalcula.`}
+                  Mueve las {piezasEntrega.length} piezas de esta entrega (el arranque se corre con ella) y el plan se recalcula.
                 </span>
               </label>
             )}
 
-            {hace && (
+            {graba && (
               <div className="flex flex-col gap-1">
                 <span className={etiqueta}>Próxima grabación</span>
                 {proximaGrabacion ? (
@@ -228,10 +329,10 @@ export function TarjetaCliente({
                       onGuardar={(fecha) => void guardar(() => actualizarGrabacion(proximaGrabacion.id, { fecha }))}
                     />
                     <span className="text-[0.75rem] text-texto-secundario">
-                      Bloquea ese día y las piezas se entregan 7 días después, salvo que les pongas otra fecha.
+                      Bloquea ese día. Las piezas de la entrega entran al plan cuando la marcás como hecha en la ficha.
                     </span>
                   </>
-                ) : graba ? (
+                ) : (
                   <div className="flex gap-2">
                     <input
                       type="date"
@@ -251,8 +352,6 @@ export function TarjetaCliente({
                       Agregar
                     </button>
                   </div>
-                ) : (
-                  <span className="text-[0.9375rem] text-texto-secundario">No graba para este cliente.</span>
                 )}
               </div>
             )}
@@ -293,7 +392,7 @@ export function TarjetaCliente({
 /** A date field that saves once the date is really chosen: picking it from the
  * calendar saves right away, typing it saves when the field loses focus (so a
  * half-typed year never reaches the plan). */
-function CampoFecha({
+export function CampoFecha({
   valor,
   disabled,
   onGuardar,
@@ -326,17 +425,17 @@ function FechaResumen({
   titulo,
   valor,
   extra,
-  apagado,
+  alerta,
 }: {
   titulo: string;
   valor?: string;
   extra?: string;
-  apagado?: boolean;
+  alerta?: boolean;
 }) {
   return (
-    <div className={cn("min-w-0 rounded-[12px] bg-bg-hundida px-2.5 py-1.5", apagado && "opacity-50")}>
+    <div className="min-w-0 rounded-[12px] bg-bg-hundida px-2.5 py-1.5">
       <dt className="text-[0.6875rem] font-medium text-texto-secundario">{titulo}</dt>
-      <dd className="numeros truncate font-semibold">{valor ? fechaCorta(valor) : "—"}</dd>
+      <dd className={cn("numeros truncate font-semibold", alerta && "text-acento-texto")}>{valor ?? "—"}</dd>
       {extra && <dd className="truncate text-[0.6875rem] text-texto-secundario">{extra}</dd>}
     </div>
   );
@@ -355,4 +454,3 @@ function Inicial({ nombre, color }: { nombre: string; color: string }) {
     </span>
   );
 }
-

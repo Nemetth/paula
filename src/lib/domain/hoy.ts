@@ -5,9 +5,10 @@
 
 import { addDays } from "date-fns";
 import { fromISODate, toISODate } from "./dates";
-import { DIAS_URGENTE, ORDEN_TIPOS } from "./entregas";
+import { DIAS_URGENTE, Entrega, ORDEN_TIPOS } from "./entregas";
 import { cantidadPiezas } from "./labels";
-import { Asignacion, Plan, UnidadTrabajo, atrasadasProximas, tareasDelDia } from "./planner";
+import { enumerar } from "./mensajes";
+import { Asignacion, CargaDia, Plan, UnidadTrabajo, atrasadasProximas, tareasDelDia } from "./planner";
 import { AdsChequeo, Client, FijoDiario } from "./types";
 import { clientesAds } from "./ads";
 import type { TareaHecha } from "@/lib/supabase/data";
@@ -80,6 +81,86 @@ export interface Hoy {
   hechas: number;
   /** Late work the plan can only fit on a later day, most important first. */
   atrasadas: Asignacion[];
+}
+
+/** What kind of day it is. Hoy draws its summary from this one value only, so
+ * it can never say "día completo" and "día bloqueado" at the same time. */
+export type EstadoDia =
+  /** Recording, travel or a day off: no production is planned. Daily checks may remain. */
+  | { tipo: "bloqueado"; titulo: string; detalle: string }
+  /** A working day with nothing on it. */
+  | { tipo: "libre" }
+  | { tipo: "en-curso" }
+  | { tipo: "completo" }
+  /** Today's list is done, but there is late work the plan put on later days. */
+  | { tipo: "completo-con-atrasos"; atrasadas: number };
+
+const BLOQUEO: Record<NonNullable<CargaDia["bloqueo"]>, { titulo: string; detalle: string }> = {
+  grabacion: { titulo: "Día de grabación", detalle: "El día queda para grabar: no hay piezas planificadas." },
+  viaje: { titulo: "Día de viaje", detalle: "No hay piezas planificadas: el viaje ocupa el día." },
+  "no-trabajo": { titulo: "Hoy no trabajás", detalle: "Lo pendiente se repartió en los próximos días." },
+  "libre-semana": { titulo: "Día libre", detalle: "Hoy no es día de trabajo en tu semana." },
+};
+
+export function estadoDelDia(hoy: Hoy, carga?: CargaDia): EstadoDia {
+  if (carga?.bloqueo) return { tipo: "bloqueado", ...BLOQUEO[carga.bloqueo] };
+  if (hoy.total === 0) return { tipo: "libre" };
+  if (hoy.hechas < hoy.total) return { tipo: "en-curso" };
+  return hoy.atrasadas.length > 0 ? { tipo: "completo-con-atrasos", atrasadas: hoy.atrasadas.length } : { tipo: "completo" };
+}
+
+/** How many client groups the morning line names before "y N cosas más". */
+const GRUPOS_EN_RESUMEN = 3;
+
+/** Today in one sentence, from what is still pending: "Hoy: 4 historias de
+ * Bessone, 2 reels de Deluxe y el chequeo de Ads. Deluxe viene justa." The
+ * same line Hoy shows under the greeting and the morning notification sends. */
+export function resumenDelDia(hoy: Hoy, clients: Client[], entregas: Entrega[]): string | undefined {
+  const pendientes = hoy.items.filter((i) => !i.hecha);
+  if (pendientes.length === 0) return undefined;
+
+  const grupos = agruparPorCliente(
+    pendientes.flatMap((i) => (i.tipo === "unidad" ? [i.asignacion] : [])),
+    clients,
+  );
+  const partes = grupos.map((g) => (g.clienteId ? `${g.resumen} de ${g.nombre}` : g.resumen));
+  const visibles = partes.slice(0, GRUPOS_EN_RESUMEN);
+  const resto = partes.length - visibles.length;
+  if (resto > 0) visibles.push(resto === 1 ? "una cosa más" : `${resto} cosas más`);
+  const ads = pendientes.filter((i) => i.tipo === "ads").length;
+  if (ads > 0) visibles.push(ads === 1 ? "el chequeo de Ads" : `${ads} chequeos de Ads`);
+  if (pendientes.some((i) => i.tipo === "fijo")) visibles.push("tus fijos");
+
+  // The deliveries of today's clients that are tight or at risk.
+  const deHoy = new Set(grupos.map((g) => g.clienteId).filter(Boolean));
+  const riesgo = new Map<string, Entrega["semaforo"]>();
+  for (const e of entregas) {
+    if (!deHoy.has(e.clienteId) || riesgo.has(e.clienteId) || e.semaforo === "lista") continue;
+    riesgo.set(e.clienteId, e.semaforo);
+  }
+  const nombre = (id: string) => clients.find((c) => c.id === id)?.nombre ?? "";
+  const enRiesgo = [...riesgo].filter(([, s]) => s === "rojo").map(([id]) => nombre(id));
+  const justas = [...riesgo].filter(([, s]) => s === "ambar").map(([id]) => nombre(id));
+
+  let frase = `Hoy: ${enumerar(visibles)}.`;
+  if (enRiesgo.length > 0) frase += ` ${enumerar(enRiesgo)} ${enRiesgo.length === 1 ? "está" : "están"} en riesgo.`;
+  else if (justas.length > 0) frase += ` ${enumerar(justas)} ${justas.length === 1 ? "viene justa" : "vienen justas"}.`;
+  return frase;
+}
+
+/** Consecutive working days Paula finished everything, counting today only if
+ * it is already done. A day off in her week doesn't break it. */
+export function racha(cumplidos: Set<string>, diasTrabajo: number[], today: Date): number {
+  const trabajo = new Set(diasTrabajo);
+  let n = 0;
+  let d = today;
+  if (!cumplidos.has(toISODate(d))) d = addDays(d, -1);
+  for (let i = 0; i < 400; i++, d = addDays(d, -1)) {
+    if (!trabajo.has(d.getDay())) continue;
+    if (!cumplidos.has(toISODate(d))) break;
+    n += 1;
+  }
+  return n;
 }
 
 /** `locales` are ticks the screen has applied but the log hasn't echoed back yet. */

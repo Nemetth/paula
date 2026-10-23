@@ -39,14 +39,20 @@ export function avanceTexto(porTipo: Entrega["porTipo"]): string {
     .join(" · ");
 }
 
-/** One bar per piece type, for the client's file. */
-export function AvancePorTipo({ porTipo }: { porTipo: Entrega["porTipo"] }) {
+/** One bar per piece type: "Historias ▓▓▓░ 8/12". `compacta` for the client cards. */
+export function AvancePorTipo({ porTipo, compacta }: { porTipo: Entrega["porTipo"]; compacta?: boolean }) {
   return (
-    <ul className="flex flex-col gap-2">
+    <ul className={cn("flex flex-col", compacta ? "gap-1" : "gap-2")}>
       {ORDEN_TIPOS.filter((t) => porTipo[t]).map((t) => {
         const a = porTipo[t] as AvanceTipo;
         return (
-          <li key={t} className="grid grid-cols-[5.5rem_1fr_auto] items-center gap-3 text-[0.9375rem]">
+          <li
+            key={t}
+            className={cn(
+              "grid items-center",
+              compacta ? "grid-cols-[4.5rem_1fr_auto] gap-2 text-[0.8125rem]" : "grid-cols-[5.5rem_1fr_auto] gap-3 text-[0.9375rem]",
+            )}
+          >
             <span className="capitalize text-texto-secundario">{TIPO_PIEZA_LABEL[t].varios}</span>
             <span className="h-2 overflow-hidden rounded-full bg-bg-hundida">
               <span

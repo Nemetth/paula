@@ -4,7 +4,7 @@
 import { differenceInCalendarDays, format, subMonths } from "date-fns";
 import { fromISODate, toISODate } from "./dates";
 import { UnidadTrabajo } from "./planner";
-import { AdsReporte, Client } from "./types";
+import { AdsChequeo, AdsReporte, Client, DIAS_REFRESH_CREATIVOS } from "./types";
 
 /** Days between deep reviews of the same account. */
 export const CADENCIA_REVISION_FONDO_DIAS = 14;
@@ -74,4 +74,26 @@ export function reportesDelMes(clients: Client[], reportes: AdsReporte[], today:
 }
 
 export const hoyEnVentanaDeReportes = (today: Date) => today.getDate() <= ULTIMO_DIA_REPORTE;
+
+export type TonoCuenta = "verde" | "ambar" | "rojo" | "gris";
+
+/** One light per account, worst problem first: stopped over a payment or marked
+ * to review → red; stale creatives or a deep review due → amber; paused → grey. */
+export function saludCuenta(cliente: Client, chequeos: AdsChequeo[], today: Date): { tono: TonoCuenta; motivo: string } {
+  if (cliente.adsEstadoCuenta === "pausada") return { tono: "gris", motivo: "Pausada" };
+  if (cliente.adsEstadoCuenta === "frenada-pago") return { tono: "rojo", motivo: "Frenada por pago" };
+  const ultimo = chequeos
+    .filter((c) => c.clienteId === cliente.id)
+    .sort((a, b) => b.fecha.localeCompare(a.fecha))[0];
+  if (ultimo?.estado === "revisar" && differenceInCalendarDays(today, fromISODate(ultimo.fecha)) <= 2) {
+    return { tono: "rojo", motivo: "Marcada para revisar" };
+  }
+  const refresh = cliente.adsRefreshCreativos
+    ? differenceInCalendarDays(today, fromISODate(cliente.adsRefreshCreativos))
+    : undefined;
+  if (refresh === undefined) return { tono: "ambar", motivo: "Sin fecha de creativos" };
+  if (refresh > DIAS_REFRESH_CREATIVOS) return { tono: "ambar", motivo: `Creativos de hace ${refresh} días` };
+  if (diasDesdeRevision(cliente, today) >= CADENCIA_REVISION_FONDO_DIAS) return { tono: "ambar", motivo: "Toca revisión a fondo" };
+  return { tono: "verde", motivo: "Al día" };
+}
 

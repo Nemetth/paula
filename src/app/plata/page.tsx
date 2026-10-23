@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown } from "lucide-react";
-import { endOfMonth, format } from "date-fns";
+import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import {
   actualizarCliente,
@@ -14,8 +14,8 @@ import {
   useGastos,
 } from "@/lib/supabase/data";
 import { balanceDelMes, proximoAumento } from "@/lib/domain/plata";
-import { CobroEstado } from "@/lib/domain/types";
-import { estadoCobro } from "@/lib/domain/cobros";
+import { Cobro, CobroEstado } from "@/lib/domain/types";
+import { cobrosDelPeriodo, estadoCobro } from "@/lib/domain/cobros";
 import { fechaCorta, fromISODate, nombreMes, toISODate } from "@/lib/domain/dates";
 import { AvisoDeshacer, AvisoDeshacerToast } from "@/components/aviso-deshacer";
 import { BotonEliminar } from "@/components/boton-eliminar";
@@ -38,17 +38,26 @@ export default function PlataPage() {
   const periodo = periodoActual();
   const cobrosTodos = useCobros();
   const gastos = useGastos();
-  const cobros = useMemo(() => cobrosTodos?.filter((c) => c.periodo === periodo), [cobrosTodos, periodo]);
+  // Every active client's cobro for the month, saved or not: rows are only
+  // written when Paula changes one, so opening this screen changes no number.
+  const cobros = useMemo(
+    () => (clients && cobrosTodos ? cobrosDelPeriodo(clients, cobrosTodos, periodo) : undefined),
+    [clients, cobrosTodos, periodo],
+  );
   const [errorCobro, setErrorCobro] = useState<string | null>(null);
   const [aviso, setAviso] = useState<AvisoDeshacer | null>(null);
   const avisoId = useRef(0);
   const cerrarAviso = useCallback(() => setAviso(null), []);
 
   /** One tap flips a cobro between cobrado and not, so every flip can be taken back. */
-  function alternarCobro(clienteId: string, nombre: string, estadoGuardado: CobroEstado, estabaPagado: boolean) {
+  function alternarCobro(cobro: Cobro, nombre: string, estadoGuardado: CobroEstado, estabaPagado: boolean) {
     setErrorCobro(null);
+    const clienteId = cobro.clienteId;
     const falla = (err: unknown) => setErrorCobro(err instanceof Error ? err.message : "No se pudo guardar el cobro.");
     crearOActualizarCobro(clienteId, periodo, {
+      // A cobro that was never saved is written with the due date and amount it shows.
+      fechaVencimiento: cobro.fechaVencimiento,
+      monto: cobro.monto,
       estado: estabaPagado ? "pendiente" : "pagado",
       fechaPago: estabaPagado ? undefined : toISODate(new Date()),
     })
@@ -62,23 +71,6 @@ export default function PlataPage() {
       })
       .catch(falla);
   }
-
-  // Make sure every active client has a cobro row for the current period.
-  useEffect(() => {
-    if (!clients || !cobros) return;
-    const existentes = new Set(cobros.map((c) => c.clienteId));
-    const hoy = new Date();
-    clients
-      .filter((c) => c.activo && !existentes.has(c.id))
-      .forEach((c) => {
-        const diaVencimiento = c.ventanaCobro?.[1] ?? endOfMonth(hoy).getDate();
-        const fecha = new Date(hoy.getFullYear(), hoy.getMonth(), Math.min(diaVencimiento, endOfMonth(hoy).getDate()));
-        crearOActualizarCobro(c.id, periodo, {
-          monto: c.montoMensual,
-          fechaVencimiento: toISODate(fecha),
-        });
-      });
-  }, [clients, cobros, periodo]);
 
   const filas = useMemo(() => {
     if (!clients || !cobros) return [];
@@ -122,7 +114,7 @@ export default function PlataPage() {
             </p>
           )}
         </div>
-        <BalanceCard cobros={cobrosTodos ?? []} gastos={gastos ?? []} periodo={periodo} />
+        <BalanceCard cobros={cobrosTodos ?? []} gastos={gastos ?? []} periodo={periodo} porCobrar={totalPendiente} />
       </div>
 
       {errorCobro && (
@@ -145,7 +137,7 @@ export default function PlataPage() {
                 </p>
               </div>
               <button
-                onClick={() => alternarCobro(cliente!.id, cliente!.nombre, cobro.estado, estado === "pagado")}
+                onClick={() => alternarCobro(cobro, cliente!.nombre, cobro.estado, estado === "pagado")}
                 aria-label={`${cliente!.nombre}: ${ESTADO_LABEL[estado]}. ${estado === "pagado" ? "Marcar como no cobrado" : "Marcar como cobrado"}`}
                 className={cn(
                   "tocable shrink-0 rounded-[8px] px-3 py-2 text-[0.8125rem] font-medium ring-1 ring-inset ring-current/25",
@@ -173,17 +165,47 @@ function BalanceCard({
   cobros,
   gastos,
   periodo,
+  porCobrar,
 }: {
   cobros: ReturnType<typeof useCobros> & object;
   gastos: ReturnType<typeof useGastos> & object;
   periodo: string;
+  /** What is still pending this month, so the bar shows the whole month. */
+  porCobrar: number;
 }) {
   const { cobrado, gastado, queda } = balanceDelMes(cobros, gastos, periodo);
   return (
-    <div className="papel entra grid grid-cols-1 divide-y divide-borde/80 sm:grid-cols-3 sm:divide-x sm:divide-y-0 sm:py-3.5" style={indice(2)}>
-      <StatCard label="Cobrado" valor={cobrado} tono="verde" />
-      <StatCard label="Gastos" valor={gastado} />
-      <StatCard label="Me queda" valor={queda} tono={queda < 0 ? "acento" : "neutral"} />
+    <div className="papel entra" style={indice(2)}>
+      <div className="grid grid-cols-1 divide-y divide-borde/80 sm:grid-cols-3 sm:divide-x sm:divide-y-0 sm:py-3.5">
+        <StatCard label="Cobrado" valor={cobrado} tono="verde" />
+        <StatCard label="Gastos" valor={gastado} />
+        <StatCard label="Me queda" valor={queda} tono={queda < 0 ? "acento" : "neutral"} />
+      </div>
+      <BarraDelMes cobrado={cobrado} porCobrar={porCobrar} gastado={gastado} />
+    </div>
+  );
+}
+
+/** The month at a glance: collected and still to collect on one bar, expenses
+ * on another at the same scale, so "how am I doing" reads without numbers. */
+function BarraDelMes({ cobrado, porCobrar, gastado }: { cobrado: number; porCobrar: number; gastado: number }) {
+  const escala = Math.max(cobrado + porCobrar, gastado, 1);
+  const pct = (n: number) => `${(n / escala) * 100}%`;
+  if (cobrado + porCobrar + gastado === 0) return null;
+  return (
+    <div className="border-t border-borde/80 px-4 pb-3.5 pt-3">
+      <div className="flex h-2.5 overflow-hidden rounded-full bg-bg-hundida" aria-hidden>
+        <span className="h-full bg-verde" style={{ width: pct(cobrado) }} />
+        <span className="h-full bg-ambar/70" style={{ width: pct(porCobrar) }} />
+      </div>
+      <div className="mt-1.5 flex h-2.5 overflow-hidden rounded-full bg-bg-hundida" aria-hidden>
+        <span className="h-full bg-acento/70" style={{ width: pct(gastado) }} />
+      </div>
+      <p className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[0.75rem] text-texto-secundario">
+        <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-verde" /> Cobrado</span>
+        <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-ambar/70" /> Por cobrar ${porCobrar.toLocaleString("es-AR")}</span>
+        <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-acento/70" /> Gastos</span>
+      </p>
     </div>
   );
 }

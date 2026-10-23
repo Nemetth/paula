@@ -134,7 +134,7 @@ export function VistaSemana({
                               </span>
                               <span className="block truncate text-texto-secundario">
                                 {t.unidad.etiqueta}
-                                {t.unidad.provisoria && " · provisoria"}
+                                {t.sobrecarga && " · sobrecarga"}
                               </span>
                             </>
                           );

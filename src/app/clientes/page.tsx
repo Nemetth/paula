@@ -11,6 +11,7 @@ import { TarjetaCliente } from "@/components/clientes/tarjeta-cliente";
 import { indice } from "@/lib/utils";
 import { colorCliente } from "@/lib/domain/calendario";
 import { toISODate } from "@/lib/domain/dates";
+import { cobrosDelPeriodo } from "@/lib/domain/cobros";
 
 /** Nearest delivery first; clients with nothing due after, paused ones last. */
 function ordenar(clients: Client[], entregas: Entrega[]) {
@@ -27,9 +28,10 @@ function ordenar(clients: Client[], entregas: Entrega[]) {
 export default function ClientesPage() {
   const ctx = usePlan();
   if (!ctx) return <Cargando />;
-  const { clients, entregas, piezas, grabaciones, cobros } = ctx;
+  const { clients, entregas, piezas, grabaciones } = ctx;
   const filas = ordenar(clients, entregas);
   const periodo = toISODate(ctx.today).slice(0, 7);
+  const cobros = cobrosDelPeriodo(clients, ctx.cobros, periodo);
 
   return (
     <div className="mx-auto max-w-[640px] px-4 pt-2 lg:max-w-[960px] lg:px-8 lg:pt-4">
@@ -55,7 +57,8 @@ export default function ClientesPage() {
       ) : (
         <section>
           <p className="entra mb-3 text-center text-[0.8125rem] text-texto-secundario" style={indice(1)}>
-            Tocá un cliente para ver o cambiar su servicio, su volumen y sus fechas. Todo el plan se recalcula solo.
+            Cada tarjeta muestra cómo va la entrega actual. Tocala para cambiar el ciclo, el volumen y las fechas: el plan
+            se recalcula solo.
           </p>
           <ul className="grid items-start gap-3 lg:grid-cols-2">
             {filas.map(({ cliente: c, entrega: e }, i) => (
@@ -66,8 +69,9 @@ export default function ClientesPage() {
                   entrega={e}
                   piezas={piezas}
                   grabaciones={grabaciones}
-                  cobro={cobros.find((x) => x.clienteId === c.id && x.periodo === periodo)}
+                  cobro={cobros.find((x) => x.clienteId === c.id)}
                   periodo={periodo}
+                  today={ctx.today}
                 />
               </li>
             ))}

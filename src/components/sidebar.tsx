@@ -5,17 +5,14 @@ import { usePathname } from "next/navigation";
 import { Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { NAV_ITEMS } from "@/components/nav-items";
-import { useClients, useCobros } from "@/lib/supabase/data";
-import { cobrosVencidos } from "@/lib/domain/cobros";
+import { useAvisos } from "@/lib/supabase/use-plan";
 
 /** Desktop-only left nav — the "generic SaaS" counterpart to the mobile
  * bottom tab bar. Mobile keeps the bottom bar (see BottomNav); this never
  * renders below the lg breakpoint. */
 export function Sidebar() {
   const pathname = usePathname();
-  const clients = useClients();
-  const cobros = useCobros();
-  const vencidos = clients && cobros ? cobrosVencidos(cobros, clients, new Date()).length : 0;
+  const vencidos = useAvisos().cobrosVencidos.length;
   const activo = NAV_ITEMS.findIndex(({ href }) => pathname === href || pathname.startsWith(`${href}/`));
 
   return (

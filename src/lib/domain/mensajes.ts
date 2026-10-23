@@ -3,24 +3,30 @@
 import { differenceInCalendarDays, format } from "date-fns";
 import { es } from "date-fns/locale";
 import { fromISODate, toISODate } from "./dates";
-import { estadoCobro } from "./cobros";
+import { cobrosVencidos } from "./cobros";
+import { Entrega } from "./entregas";
+import { cantidadPiezas } from "./labels";
 import { Plan } from "./planner";
-import { Client, Cobro, Grabacion, Pieza } from "./types";
+import { Client, Cobro, Grabacion, ORDEN_TIPOS, Pieza } from "./types";
 
 export type TipoMensaje =
   | "pedir-material"
   | "avisar-grabacion"
   | "recordar-aprobacion"
   | "recordar-pago"
-  | "correr-entrega";
+  | "correr-entrega"
+  | "entrega-lista";
 
 export interface MensajeContexto {
   cliente: Client;
   /** ISO date of the recording, for "avisar-grabacion". */
   fechaGrabacion?: string;
-  /** For "correr-entrega": the delivery as agreed, and the date it can really be done by. */
+  /** For "correr-entrega" and "entrega-lista": the delivery as agreed. */
   fechaEntrega?: string;
+  /** For "correr-entrega": the date it can really be done by. */
   fechaNueva?: string;
+  /** For "entrega-lista": what it has, "16 historias, 4 posteos y 4 reels". */
+  contenido?: string;
 }
 
 export const MENSAJES: { tipo: TipoMensaje; titulo: string }[] = [
@@ -29,11 +35,23 @@ export const MENSAJES: { tipo: TipoMensaje; titulo: string }[] = [
   { tipo: "recordar-aprobacion", titulo: "Recordar la aprobación" },
   { tipo: "recordar-pago", titulo: "Recordar el pago" },
   { tipo: "correr-entrega", titulo: "Correr la entrega" },
+  { tipo: "entrega-lista", titulo: "Avisar que la entrega está lista" },
 ];
+
+/** "a, b y c". */
+export function enumerar(partes: string[]): string {
+  if (partes.length <= 1) return partes[0] ?? "";
+  return `${partes.slice(0, -1).join(", ")} y ${partes.at(-1)}`;
+}
+
+/** "16 historias, 4 posteos y 4 reels". */
+export function contenidoDeEntrega(e: Entrega): string {
+  return enumerar(ORDEN_TIPOS.filter((t) => e.porTipo[t]).map((t) => cantidadPiezas(e.porTipo[t]!.total, t)));
+}
 
 export function textoMensaje(
   tipo: TipoMensaje,
-  { cliente, fechaGrabacion, fechaEntrega, fechaNueva }: MensajeContexto,
+  { cliente, fechaGrabacion, fechaEntrega, fechaNueva, contenido }: MensajeContexto,
 ): string {
   const saludo = `Hola ${cliente.nombre.replace(/^\[Demo\]\s*/, "")}!`;
   switch (tipo) {
@@ -54,6 +72,11 @@ export function textoMensaje(
       const original = fechaEntrega ? ` del ${dia(fechaEntrega)}` : "";
       const nueva = fechaNueva ? `para el ${dia(fechaNueva)}` : "unos días más tarde";
       return `${saludo} Se me juntó trabajo y la entrega${original} te la voy a poder dejar lista ${nueva}. ¿Te parece bien? Gracias por la paciencia!`;
+    }
+    case "entrega-lista": {
+      const de = fechaEntrega ? ` del ${format(fromISODate(fechaEntrega), "d 'de' MMMM", { locale: es })}` : "";
+      const que = contenido ? `: ${contenido}` : "";
+      return `${saludo} Ya está lista la entrega${de}${que}. Te la paso por acá, cualquier ajuste me avisás!`;
     }
   }
 }
@@ -76,10 +99,13 @@ export interface MensajePendiente {
   cliente: Client;
   texto: string;
   enlace: string | null;
+  /** "correr-entrega": the move it proposes, so it can be applied with one tap. */
+  corrimiento?: { fechaEntrega: string; fechaNueva: string };
 }
 
-/** Days of an idea sitting unapproved before we nudge the client. */
-export const DIAS_APROBACION_DEMORADA = 3;
+/** A finished delivery counts as "just finished" this many days after its date. */
+const DIAS_ENTREGA_LISTA = 3;
+
 /** How many days ahead of a recording the client gets notified. */
 const DIAS_AVISO_GRABACION = 2;
 
@@ -95,12 +121,20 @@ export function mensajesPendientes(input: {
   hechos: Set<string>;
   /** When given, adds the "correr la entrega" suggestions for work that can't make its date. */
   plan?: Plan;
+  /** When given, adds "la entrega está lista" for deliveries just finished. */
+  entregas?: Entrega[];
 }): MensajePendiente[] {
-  const { today, clients, piezas, grabaciones, cobros, hechos, plan } = input;
+  const { today, clients, piezas, grabaciones, cobros, hechos, plan, entregas } = input;
   const out: MensajePendiente[] = [];
   const activos = clients.filter((c) => c.activo && c.estado !== "en-pausa");
 
-  function agregar(tipo: TipoMensaje, cliente: Client, ref: string, contexto: Partial<MensajeContexto> = {}) {
+  function agregar(
+    tipo: TipoMensaje,
+    cliente: Client,
+    ref: string,
+    contexto: Partial<MensajeContexto> = {},
+    extra: Partial<MensajePendiente> = {},
+  ) {
     const id = `${tipo}__${cliente.id}__${ref}`;
     if (hechos.has(id)) return;
     const texto = textoMensaje(tipo, { cliente, ...contexto });
@@ -111,7 +145,14 @@ export function mensajesPendientes(input: {
       cliente,
       texto,
       enlace: enlaceWhatsapp(cliente.contactoWhatsapp, texto),
+      ...extra,
     });
+  }
+
+  for (const e of entregas ?? []) {
+    const cliente = activos.find((c) => c.id === e.clienteId);
+    if (!cliente || e.semaforo !== "lista" || e.dias < -DIAS_ENTREGA_LISTA) continue;
+    agregar("entrega-lista", cliente, e.fecha, { fechaEntrega: e.fecha, contenido: contenidoDeEntrega(e) });
   }
 
   for (const g of grabaciones) {
@@ -125,31 +166,28 @@ export function mensajesPendientes(input: {
 
   const semana = format(today, "RRRR-'W'II");
   for (const c of activos) {
-    const demoradas = piezas.some(
-      (p) =>
-        p.clienteId === c.id &&
-        p.estado === "idea" &&
-        differenceInCalendarDays(today, new Date(p.creadaEn)) >= DIAS_APROBACION_DEMORADA,
-    );
-    if (demoradas || c.estado === "esperando-aprobacion") agregar("recordar-aprobacion", c, semana);
+    if (c.estado === "esperando-aprobacion") agregar("recordar-aprobacion", c, semana);
 
     if (c.tipo === "material-cliente") {
-      const conMaterial = piezas.some((p) => p.clienteId === c.id && (p.estado === "aprobada" || p.estado === "grabada"));
+      const conMaterial = piezas.some((p) => p.clienteId === c.id && !p.hecha);
       if (!conMaterial && c.estado === "en-produccion") agregar("pedir-material", c, toISODate(today).slice(0, 7));
     }
   }
 
-  for (const cobro of cobros) {
+  for (const cobro of cobrosVencidos(cobros, clients, today)) {
     const cliente = activos.find((c) => c.id === cobro.clienteId);
-    if (cliente && estadoCobro(cobro, today) === "vencido") agregar("recordar-pago", cliente, cobro.periodo);
+    if (cliente) agregar("recordar-pago", cliente, cobro.periodo);
   }
 
   if (plan) {
     for (const c of corrimientosSugeridos(plan, activos)) {
-      agregar("correr-entrega", c.cliente, `${c.fechaEntrega}@${c.fechaNueva}`, {
-        fechaEntrega: c.fechaEntrega,
-        fechaNueva: c.fechaNueva,
-      });
+      agregar(
+        "correr-entrega",
+        c.cliente,
+        `${c.fechaEntrega}@${c.fechaNueva}`,
+        { fechaEntrega: c.fechaEntrega, fechaNueva: c.fechaNueva },
+        { corrimiento: { fechaEntrega: c.fechaEntrega, fechaNueva: c.fechaNueva } },
+      );
     }
   }
 
@@ -166,12 +204,18 @@ export interface CorrimientoSugerido {
   tareas: number;
 }
 
-/** Deliveries the plan cannot make: late work the planner could only fit after
- * the date. Most pressing delivery first. These are the cases where the right
- * move is to tell the client, not to work harder. */
+/** Deliveries the plan cannot make at a normal pace: ones that only fit by
+ * going over the daily cap, and late work it could only fit after the date.
+ * Most pressing delivery first. These are the cases where the right move is to
+ * tell the client, not to work harder. */
 export function corrimientosSugeridos(plan: Plan, clientes: Client[]): CorrimientoSugerido[] {
   const porId = new Map(clientes.map((c) => [c.id, c]));
   const grupos = new Map<string, CorrimientoSugerido>();
+  for (const s of plan.sobrecargas) {
+    const cliente = s.clienteId ? porId.get(s.clienteId) : undefined;
+    if (!cliente || !s.fechaPosible) continue;
+    grupos.set(`${cliente.id}|${s.limite}`, { cliente, fechaEntrega: s.limite, fechaNueva: s.fechaPosible, tareas: s.tareas });
+  }
   for (const a of plan.asignaciones) {
     const { clienteId, limite, tipo } = a.unidad;
     const cliente = clienteId ? porId.get(clienteId) : undefined;

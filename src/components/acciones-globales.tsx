@@ -4,23 +4,20 @@ import { useState } from "react";
 import Link from "next/link";
 import { Bell, Plus } from "lucide-react";
 import { crearTarea } from "@/lib/supabase/data";
-import { usePlan } from "@/lib/supabase/use-plan";
+import { useAvisos, usePlan } from "@/lib/supabase/use-plan";
 import { AlertaGlobal, AlertaGrupo } from "@/lib/domain/alertas";
 import { MensajePendiente } from "@/lib/domain/mensajes";
-import { useAvisos } from "@/lib/supabase/use-avisos";
 import { MensajesPendientes } from "@/components/mensajes-pendientes";
 import { BotonPrimario, Sheet } from "@/components/sheet";
 import { Sol } from "@/components/empty-state";
 
 const GRUPO_LABEL: Record<AlertaGrupo, string> = {
   atraso: "Atrasos",
-  aprobacion: "Aprobaciones demoradas",
-  cobro: "Cobros vencidos",
-  contenido: "Contenido",
+  carga: "Sobrecarga",
+  grabacion: "Esperan grabación",
   ads: "Ads",
-  carga: "Días sobrecargados",
 };
-const GRUPO_ORDEN: AlertaGrupo[] = ["atraso", "carga", "aprobacion", "cobro", "contenido", "ads"];
+const GRUPO_ORDEN: AlertaGrupo[] = ["carga", "atraso", "grabacion", "ads"];
 
 const campo = "input";
 const etiqueta = "text-[0.8125rem] font-medium text-texto-secundario";
@@ -32,8 +29,7 @@ export function AccionesGlobales() {
   const [campanaAbierta, setCampanaAbierta] = useState(false);
   const [tareaAbierta, setTareaAbierta] = useState(false);
 
-  const { alertas, mensajes } = useAvisos(ctx);
-  const total = alertas.length + mensajes.length;
+  const { alertas, mensajes, total } = useAvisos();
 
   return (
     <>

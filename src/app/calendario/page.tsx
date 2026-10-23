@@ -21,8 +21,6 @@ import { cn } from "@/lib/utils";
 
 type Vista = "semana" | "mes";
 
-const HORIZONTE_DIAS = 120;
-
 export default function CalendarioPage() {
   const today = useMemo(() => new Date(), []);
   const hoyISO = toISODate(today);
@@ -36,11 +34,10 @@ export default function CalendarioPage() {
     if (seleccionado) document.getElementById("detalle-dia")?.scrollIntoView({ block: "nearest", behavior: "smooth" });
   }, [seleccionado]);
 
-  const ctx = usePlan(HORIZONTE_DIAS);
+  const ctx = usePlan();
   const plan = ctx?.plan ?? null;
   const clients = ctx?.clients;
   const piezas = ctx?.piezas;
-  const grabaciones = ctx?.grabaciones;
   const cobros = ctx?.cobros;
   const entregas = ctx?.entregas;
 
@@ -51,8 +48,8 @@ export default function CalendarioPage() {
   }, [plan, cobros, ancla, today]);
 
   const cierre = useMemo(
-    () => (plan && piezas && grabaciones ? cierreDelMes(ancla, piezas, grabaciones, plan) : null),
-    [plan, piezas, grabaciones, ancla],
+    () => (plan && piezas ? cierreDelMes(ancla, piezas, plan) : null),
+    [plan, piezas, ancla],
   );
 
   const especiales = useMemo(() => (clients ? fechasEspecialesDelMes(ancla, clients) : []), [ancla, clients]);
@@ -171,7 +168,7 @@ export default function CalendarioPage() {
                         </p>
                         <p className="text-[0.8125rem] text-texto-secundario">
                           {avanceTexto(e.porTipo)}
-                          {e.provisoria && " · falta grabar"}
+                          {e.esperaGrabacion && " · falta grabar"}
                         </p>
                       </div>
                       <span className={cn("shrink-0 text-[0.8125rem] font-medium", SEMAFORO_ENTREGA[e.semaforo].texto)}>

@@ -1,4 +1,10 @@
-import { ClienteEstado, ClienteTipo, PieceType, PiezaEstado } from "./types";
+import { AdsEstadoCuenta, ClienteEstado, ClienteTipo, PieceType } from "./types";
+
+export const ESTADO_CUENTA_ADS_LABEL: Record<AdsEstadoCuenta, string> = {
+  activa: "Activa",
+  pausada: "Pausada",
+  "frenada-pago": "Frenada por pago",
+};
 
 export const ESTADO_CLIENTE_LABEL: Record<ClienteEstado, string> = {
   "al-dia": "Al día",
@@ -14,15 +20,6 @@ export const TIPO_CLIENTE_LABEL: Record<ClienteTipo, string> = {
   "material-cliente": "Me manda el material",
   "pedidos-diarios": "Pedidos diarios sin plan",
   "ciclo-grabacion": "Ciclo atado a la grabación",
-};
-
-export const ESTADO_PIEZA_LABEL: Record<PiezaEstado, string> = {
-  idea: "Idea",
-  aprobada: "Aprobada",
-  grabada: "Grabada",
-  editada: "Editada",
-  entregada: "Entregada",
-  programada: "Programada",
 };
 
 export const TIPO_PIEZA_LABEL: Record<PieceType, { uno: string; varios: string }> = {

@@ -22,11 +22,11 @@ export function EntregaActual({ cliente, entregas }: { cliente: Client; entregas
 
   if (!actual) {
     return (
-      <section className="papel mb-8 px-4 py-4">
+      <section className="papel mb-6 px-4 py-4">
         <p className="text-[0.8125rem] font-medium text-texto-secundario">Próxima entrega</p>
         <p className="titulo mt-0.5 text-[1.375rem] font-medium">Sin entregas pendientes</p>
         <p className="mt-1 text-[0.8125rem] text-texto-secundario">
-          Las piezas aprobadas con fecha de entrega (o con grabación) aparecen acá.
+          Cada entrega se genera sola desde el ciclo del cliente: tipo de ciclo, día de entrega y volumen.
         </p>
       </section>
     );
@@ -36,7 +36,7 @@ export function EntregaActual({ cliente, entregas }: { cliente: Client; entregas
   const margen = margenDe(cliente);
 
   return (
-    <section className="papel mb-8 px-4 py-4">
+    <section className="papel mb-6 px-4 py-4">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-[0.8125rem] font-medium text-texto-secundario">Próxima entrega</p>
@@ -44,7 +44,7 @@ export function EntregaActual({ cliente, entregas }: { cliente: Client; entregas
             {format(fromISODate(actual.fecha), "EEEE d 'de' MMMM", { locale: es })}
           </p>
           <p className="mt-0.5 text-[0.9375rem] text-texto-secundario">
-            {cuando(actual.dias)}
+            {cuando(actual.dias)} · arranca el {fechaDM(actual.inicio)}
             {margen > 0 && <> · terminar el {fechaDM(actual.objetivo)}</>}
           </p>
         </div>
@@ -65,7 +65,7 @@ export function EntregaActual({ cliente, entregas }: { cliente: Client; entregas
         </span>{" "}
         <span className="text-texto-secundario">
           listas · faltan {actual.faltan}
-          {actual.provisoria && " · parte depende de una grabación"}
+          {actual.esperaGrabacion && " · esperan la grabación para entrar al plan"}
         </span>
       </p>
       <AvancePorTipo porTipo={actual.porTipo} />
