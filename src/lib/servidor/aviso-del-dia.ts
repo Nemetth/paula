@@ -24,6 +24,7 @@ import {
   rowToPieza,
   rowToReporte,
 } from "@/lib/supabase/filas";
+import { leerTabla } from "@/lib/supabase/leer";
 
 /** Paula's day, not the server's: Vercel runs on UTC. */
 const ZONA = "America/Argentina/Buenos_Aires";
@@ -44,12 +45,15 @@ export function supabaseServidor() {
   return createClient(url, clave, { auth: { persistSession: false } });
 }
 
+/** Settings and day overrides are keyed by user, not by an id. */
+const SIN_ID = new Set(["settings", "day_overrides"]);
+
 async function tabla<T>(nombre: string, filtro?: { columna: string; valor: string }): Promise<T[]> {
-  let q = supabaseServidor().from(nombre).select("*");
-  if (filtro) q = q.eq(filtro.columna, filtro.valor);
-  const { data, error } = await q;
-  if (error) throw new Error(`[${nombre}] ${error.message}`);
-  return (data ?? []) as T[];
+  try {
+    return await leerTabla<T>(supabaseServidor(), nombre, filtro, SIN_ID.has(nombre) ? "user_id" : "id");
+  } catch (e) {
+    throw new Error(`[${nombre}] ${e instanceof Error ? e.message : (e as { message?: string }).message}`);
+  }
 }
 
 /** A table added in a later migration: until it's run, read it as empty instead of failing the push. */

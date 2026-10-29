@@ -547,7 +547,11 @@ export function SeccionIdeas({ cliente, ideas }: { cliente: Client; ideas: Idea[
               <input
                 type="checkbox"
                 checked={i.usada}
-                onChange={(e) => marcarIdeaUsada(i.id, e.target.checked)}
+                onChange={(e) =>
+                  void marcarIdeaUsada(i.id, e.target.checked).catch((err) =>
+                    setError(err instanceof Error ? err.message : "No se pudo guardar."),
+                  )
+                }
                 aria-label="Idea usada"
                 className="h-[16px] w-[16px] accent-[var(--color-oscuro)]"
               />

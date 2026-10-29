@@ -161,8 +161,15 @@ export function ciclosPorAbrir(input: {
     const ultimo = ciclos.filter((c) => c.clienteId === client.id).sort((a, b) => a.entrega.localeCompare(b.entrega)).at(-1);
     let entrega = ultimo ? entregaSiguiente(cfg, ultimo.entrega) : proxima;
     if (entrega < proxima) entrega = proxima;
+    // Never more than one delivery ahead of the one being worked on: finishing
+    // early opens the next cycle, not every cycle after it.
+    if (entrega > entregaSiguiente(cfg, proxima)) continue;
 
-    const ultimoListo = !ultimo || piezas.filter((p) => p.cicloId === ultimo.id).every((p) => p.hecha);
+    // A cycle whose pieces aren't here yet (its row echoed back before them) is
+    // just opening, not finished: reading it as done is what chained cycles
+    // into the following years.
+    const delUltimo = ultimo ? piezas.filter((p) => p.cicloId === ultimo.id) : [];
+    const ultimoListo = !ultimo || (delUltimo.length > 0 && delUltimo.every((p) => p.hecha));
     if (!ultimoListo && hoy < inicioVentana(entrega, client)) continue;
 
     const ciclo: Ciclo = { id: idCiclo(client.id, entrega), clienteId: client.id, entrega };

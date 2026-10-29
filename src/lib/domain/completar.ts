@@ -54,6 +54,18 @@ export async function completarUnidad(u: UnidadTrabajo, ctx?: ContextoCompletar)
   // Unit ids: "{piezaId}:edicion", "{piezaId}:guion", "tarea:{id}",
   // "ads-revision:{clienteId}:{semana}", "ads-recambio:{clienteId}:{día}",
   // "ads-reporte:{clienteId}:{periodo}", "{clienteId}:calendario:{entrega}".
+  try {
+    await escribirHecho(u, fecha);
+  } catch (e) {
+    // The fact didn't land: drop the log line too, or Hoy would show it done.
+    await quitarHecha(hecha.id).catch(() => undefined);
+    throw e;
+  }
+  return hecha;
+}
+
+/** The source fact behind a unit: what actually makes it done. */
+async function escribirHecho(u: UnidadTrabajo, fecha: string): Promise<void> {
   const partes = u.id.split(":");
   if (u.tipo === "ads-revision" && u.clienteId) {
     await registrarAds({ clienteId: u.clienteId, tipo: "revision", ref: partes[2], fecha });
@@ -67,7 +79,6 @@ export async function completarUnidad(u: UnidadTrabajo, ctx?: ContextoCompletar)
   } else if (u.tipo === "tarea" && u.tareaId) await completarTarea(u.tareaId);
   else if (u.piezaId && u.tipo === "guion") await actualizarPieza(u.piezaId, { guionListo: true });
   else if (u.piezaId && u.tipo === "edicion") await actualizarPieza(u.piezaId, { hecha: true });
-  return hecha;
 }
 
 /** Undo a tick from its log line: put the source fact back, then drop the line. */

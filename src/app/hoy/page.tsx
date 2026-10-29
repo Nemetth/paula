@@ -192,10 +192,12 @@ export default function HoyPage() {
     setLocales((prev) => new Set([...prev, ...unidades]));
     void seguro(async () => {
       const deshacer: (() => Promise<unknown>)[] = [];
+      const guardadas = new Set<string>();
       try {
         for (const i of elegidas) {
           if (i.tipo === "unidad") {
             const h = await completarUnidad(i.asignacion.unidad, { clients });
+            guardadas.add(i.asignacion.unidad.id);
             deshacer.push(() => deshacerHecha(h));
           } else if (i.tipo === "ads") {
             await guardarChequeoAds(i.cliente.id, todayISO, "ok");
@@ -206,10 +208,14 @@ export default function HoyPage() {
           }
         }
       } finally {
-        mostrarAviso(`${deshacer.length} ${deshacer.length === 1 ? "hecha" : "hechas"}`, () => {
-          unidades.forEach(quitarLocal);
-          void seguro(() => Promise.all(deshacer.map((f) => f())));
-        });
+        // What failed midway didn't get done: it goes back to pending.
+        unidades.filter((id) => !guardadas.has(id)).forEach(quitarLocal);
+        if (deshacer.length > 0) {
+          mostrarAviso(`${deshacer.length} ${deshacer.length === 1 ? "hecha" : "hechas"}`, () => {
+            unidades.forEach(quitarLocal);
+            void seguro(() => Promise.all(deshacer.map((f) => f())));
+          });
+        }
       }
     });
   }

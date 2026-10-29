@@ -410,12 +410,15 @@ export function planificar(input: PlannerInput): Plan {
   // ---- units ----
   const pospuestas = input.pospuestas ?? {};
   const hechasHoy = new Set(input.unidadesHechasHoy ?? []);
+  const ultimoDia = slots.at(-1)?.fecha ?? todayISO;
   const unidades = [...unidadesDePiezas(input, alertas), ...unidadesDeCalendario(input), ...(input.extras ?? [])]
     .filter((u) => !hechasHoy.has(u.id))
     .map((u) => {
       const hasta = pospuestas[u.id];
       return hasta && hasta > (u.desde ?? "") ? { ...u, desde: hasta } : u;
-    });
+    })
+    // Work that can't start inside the horizon isn't late or homeless: it's just later.
+    .filter((u) => !u.desde || u.desde <= ultimoDia);
 
   /** Units of the same delivery spread together. */
   const grupo = (u: UnidadTrabajo) => `${u.clienteId ?? u.id}|${u.limite ?? ""}`;
@@ -701,12 +704,22 @@ export function planificar(input: PlannerInput): Plan {
     });
   }
 
-  for (const u of sinLugar) {
+  // One per delivery too: a weekly routine with no room would otherwise repeat
+  // the same line once per week.
+  const sinLugarPorGrupo = new Map<string, UnidadTrabajo[]>();
+  for (const u of sinLugar) sinLugarPorGrupo.set(grupo(u), [...(sinLugarPorGrupo.get(grupo(u)) ?? []), u]);
+  for (const us of sinLugarPorGrupo.values()) {
+    const u = us[0];
+    const etiquetas = new Set(us.map((x) => x.etiqueta));
+    const que =
+      etiquetas.size === 1
+        ? `${u.etiqueta}${us.length > 1 ? ` (${us.length})` : ""}`
+        : `${plural(us.length, "tarea", "tareas")}${u.limite ? ` de la entrega del ${fechaCorta(u.limite)}` : ""}`;
     alertas.push({
       tipo: "no-entra",
       clienteId: u.clienteId,
       fecha: u.limite,
-      mensaje: `Sin lugar en ${horizonte} días: ${quien(u)}${u.clienteId ? ` · ${u.etiqueta}` : ""}`,
+      mensaje: `Sin lugar en ${horizonte} días: ${u.clienteId && clientById.has(u.clienteId) ? `${quien(u)} · ${que}` : que}`,
     });
   }
 

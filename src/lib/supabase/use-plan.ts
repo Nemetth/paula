@@ -199,8 +199,9 @@ function useCalcularAvisos(ctx: PlanContext | null): Avisos {
   }, [ctx, firma]);
 }
 
-/** Cycles being written right now, across remounts: the realtime echo takes a
- * moment, and opening the same cycle twice would only bounce off the database. */
+/** Clients whose cycle is being written right now, across remounts: the
+ * realtime echo of the cycle and its pieces takes a moment, and until both are
+ * back the plan must not decide anything else about that client's cycles. */
 const abriendo = new Set<string>();
 
 /** Opens the cycles that are due (new client, last cycle finished, window
@@ -213,11 +214,11 @@ function useAbrirCiclos(ctx: PlanContext | null) {
   );
   useEffect(() => {
     for (const { ciclo, piezas } of pendientes) {
-      if (abriendo.has(ciclo.id)) continue;
-      abriendo.add(ciclo.id);
+      if (abriendo.has(ciclo.clienteId)) continue;
+      abriendo.add(ciclo.clienteId);
       abrirCiclo(ciclo, piezas)
         .catch((e) => console.error("[ciclos] no se pudo abrir", ciclo.id, e))
-        .finally(() => setTimeout(() => abriendo.delete(ciclo.id), 10_000));
+        .finally(() => setTimeout(() => abriendo.delete(ciclo.clienteId), 10_000));
     }
   }, [pendientes]);
 }

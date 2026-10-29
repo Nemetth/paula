@@ -17,7 +17,7 @@ import { balanceDelMes, proximoAumento } from "@/lib/domain/plata";
 import { Cobro, CobroEstado } from "@/lib/domain/types";
 import { cobrosDelPeriodo, estadoCobro } from "@/lib/domain/cobros";
 import { fechaCorta, fromISODate, nombreMes, toISODate } from "@/lib/domain/dates";
-import { AvisoDeshacer, AvisoDeshacerToast } from "@/components/aviso-deshacer";
+import { AvisoDeshacer, AvisoDeshacerToast, avisarConDeshacer } from "@/components/aviso-deshacer";
 import { BotonEliminar } from "@/components/boton-eliminar";
 import { EmptyState } from "@/components/empty-state";
 import { Encabezado } from "@/components/encabezado";
@@ -297,7 +297,17 @@ function AumentosSection({ clients }: { clients: NonNullable<ReturnType<typeof u
               </p>
             </div>
             <button
-              onClick={() => actualizarCliente(c.id, { ultimoAumento: toISODate(hoy) })}
+              onClick={() => {
+                const antes = c.ultimoAumento;
+                actualizarCliente(c.id, { ultimoAumento: toISODate(hoy) })
+                  .then(() =>
+                    avisarConDeshacer(`${c.nombre}: aumento aplicado hoy`, () => {
+                      // An empty date clears it: the client had no increase on record.
+                      void actualizarCliente(c.id, { ultimoAumento: antes ?? "" }).catch(console.error);
+                    }),
+                  )
+                  .catch(console.error);
+              }}
               className="tocable shrink-0 rounded-[8px] border border-borde px-3 py-2 text-[0.8125rem] font-medium hover:bg-borde/40"
             >
               Aplicado hoy

@@ -189,17 +189,18 @@ function valuesFromClient(c?: Client): ClienteFormValues {
 export function clienteFormValuesToInput(v: ClienteFormValues) {
   return {
     nombre: v.nombre.trim(),
-    rubro: v.rubro.trim() || undefined,
+    // Empty clears the field when editing (left out, it would keep the old value).
+    rubro: v.rubro.trim(),
     servicio: v.servicio,
     tipo: v.tipo,
     estado: v.estado,
     intocable: v.intocable,
     volumenMensual: v.volumenMensual,
     flujo: { ...v.flujo, cicloTipo: tipoCiclo(v.flujo) },
-    contactoWhatsapp: v.contactoWhatsapp.trim() || undefined,
+    contactoWhatsapp: v.contactoWhatsapp.trim(),
     ventanaCobro: [v.ventanaCobroInicio, v.ventanaCobroFin] as [number, number],
-    montoMensual: v.montoMensual ? Number(v.montoMensual) : undefined,
-    notas: v.notas.trim() || undefined,
+    montoMensual: v.montoMensual ? Number(v.montoMensual) : null,
+    notas: v.notas.trim(),
   };
 }
 

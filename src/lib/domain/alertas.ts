@@ -129,5 +129,7 @@ export function alertasGlobales(input: {
     });
   }
 
-  return out;
+  // The same id is the same fact: say it once (it is also the list's React key).
+  const vistas = new Set<string>();
+  return out.filter((a) => !vistas.has(a.id) && vistas.add(a.id));
 }

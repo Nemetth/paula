@@ -10,6 +10,7 @@
 
 import { useSyncExternalStore } from "react";
 import { supabase } from "./client";
+import { leerTabla } from "./leer";
 import {
   AdsChequeo,
   AdsEstado,
@@ -138,6 +139,11 @@ interface TableStore<Row> {
 
 const tableStores = new Map<string, TableStore<unknown>>();
 
+/** Realtime channels are named per start: a channel being removed keeps its
+ * name until the server confirms, and asking for that name again returns the
+ * closing one, which throws on `.on()`. */
+let serieCanales = 0;
+
 function getTableStore<Row extends { id: string }>(table: string): TableStore<Row> {
   const existing = tableStores.get(table);
   if (existing) return existing as TableStore<Row>;
@@ -147,51 +153,78 @@ function getTableStore<Row extends { id: string }>(table: string): TableStore<Ro
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let channel: any;
   let refCount = 0;
+  /** Bumped on every fetch and stop, so a stale response never lands. */
+  let generacion = 0;
+  /** A change arrived while the first fetch was in flight: fetch again once it lands. */
+  let cambioDuranteCarga = false;
 
   function notify() {
     listeners.forEach((l) => l());
   }
 
-  function start() {
-    const client = supabase();
-
-    client
-      .from(table)
-      .select("*")
-      .then(({ data, error }: { data: Row[] | null; error: unknown }) => {
-        if (error) {
-          console.error(`[${table}] fetch error`, error);
-          rows = [];
-          marcarFalla(table, true);
-        } else {
-          rows = data ?? [];
-          marcarFalla(table, false);
-        }
+  function cargar() {
+    const esta = ++generacion;
+    cambioDuranteCarga = false;
+    leerTabla<Row>(supabase(), table).then(
+      (data) => {
+        if (esta !== generacion) return;
+        rows = data;
+        marcarFalla(table, false);
         notify();
-      });
+        if (cambioDuranteCarga) cargar();
+      },
+      (error) => {
+        if (esta !== generacion) return;
+        console.error(`[${table}] fetch error`, error);
+        rows = rows ?? [];
+        marcarFalla(table, true);
+        notify();
+      },
+    );
+  }
 
-    channel = client
-      .channel(`${table}-changes`)
+  /** Back from the background: realtime doesn't replay what changed meanwhile. */
+  function alVolver() {
+    if (document.visibilityState === "visible") cargar();
+  }
+
+  function start() {
+    cargar();
+    let suscripto = false;
+    channel = supabase()
+      .channel(`${table}-changes-${++serieCanales}`)
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       .on("postgres_changes", { event: "*", schema: "public", table }, (payload: any) => {
-        const list = rows ?? [];
+        // Until the first fetch lands there's nothing to patch: a list built
+        // from one change would read as the whole table.
+        if (!rows) {
+          cambioDuranteCarga = true;
+          return;
+        }
         if (payload.eventType === "DELETE") {
           const oldId = (payload.old as Row).id;
-          rows = list.filter((r) => r.id !== oldId);
+          rows = rows.filter((r) => r.id !== oldId);
         } else {
           const next = payload.new as Row;
-          const exists = list.some((r) => r.id === next.id);
-          rows = exists ? list.map((r) => (r.id === next.id ? next : r)) : [...list, next];
+          const exists = rows.some((r) => r.id === next.id);
+          rows = exists ? rows.map((r) => (r.id === next.id ? next : r)) : [...rows, next];
         }
         notify();
       })
-      .subscribe();
+      .subscribe((status: string) => {
+        // A reconnect after a dropped connection: catch up on what was missed.
+        if (status === "SUBSCRIBED" && suscripto) cargar();
+        if (status === "SUBSCRIBED") suscripto = true;
+      });
+    document.addEventListener("visibilitychange", alVolver);
   }
 
   function stop() {
+    document.removeEventListener("visibilitychange", alVolver);
     supabase().removeChannel(channel);
     channel = undefined;
     rows = undefined;
+    generacion += 1;
   }
 
   const store: TableStore<Row> = {
@@ -509,7 +542,8 @@ export interface NuevoClienteInput {
   flujo: FlujoConfig;
   contactoWhatsapp?: string;
   ventanaCobro?: [number, number];
-  montoMensual?: number;
+  /** `null` clears it. */
+  montoMensual?: number | null;
   notas?: string;
   tipo?: ClienteTipo;
   estado?: ClienteEstado;
@@ -522,27 +556,32 @@ export interface NuevoClienteInput {
   notasReunion?: string;
 }
 
-function clienteInputToRow(input: NuevoClienteInput) {
+/** A field left out stays as it is (a partial update must not touch it); an
+ * empty one clears it. */
+function vaciable<T>(v: T | "" | null | undefined): T | null | undefined {
+  return v === undefined ? undefined : v === "" ? null : v;
+}
+
+function clienteInputToRow(input: Partial<NuevoClienteInput>) {
   return {
     nombre: input.nombre,
-    rubro: input.rubro ?? null,
+    rubro: vaciable(input.rubro),
     servicio: input.servicio,
     volumen_mensual: input.volumenMensual,
     flujo: input.flujo,
-    contacto_whatsapp: input.contactoWhatsapp ?? null,
-    ventana_cobro: input.ventanaCobro ?? null,
-    monto_mensual: input.montoMensual ?? null,
-    notas: input.notas ?? null,
+    contacto_whatsapp: vaciable(input.contactoWhatsapp),
+    ventana_cobro: input.ventanaCobro,
+    monto_mensual: input.montoMensual,
+    notas: vaciable(input.notas),
     tipo: input.tipo,
     estado: input.estado,
     intocable: input.intocable,
     ads_ultima_revision: input.adsUltimaRevision,
-    // An empty link or date clears it.
-    ads_cuenta_url: input.adsCuentaUrl === "" ? null : input.adsCuentaUrl,
+    ads_cuenta_url: vaciable(input.adsCuentaUrl),
     ads_estado_cuenta: input.adsEstadoCuenta,
-    ads_refresh_creativos: input.adsRefreshCreativos === "" ? null : input.adsRefreshCreativos,
-    ultimo_aumento: input.ultimoAumento,
-    notas_reunion: input.notasReunion,
+    ads_refresh_creativos: vaciable(input.adsRefreshCreativos),
+    ultimo_aumento: vaciable(input.ultimoAumento),
+    notas_reunion: vaciable(input.notasReunion),
   };
 }
 
@@ -554,7 +593,7 @@ export async function crearCliente(input: NuevoClienteInput): Promise<Client> {
 
 export async function actualizarCliente(id: string, input: Partial<NuevoClienteInput> & { activo?: boolean }): Promise<void> {
   const { activo, ...rest } = input;
-  const row: Record<string, unknown> = { ...clienteInputToRow(rest as NuevoClienteInput) };
+  const row: Record<string, unknown> = { ...clienteInputToRow(rest) };
   if (activo !== undefined) row.activo = activo;
   // Only send fields that were actually provided.
   Object.keys(row).forEach((k) => row[k] === undefined && delete row[k]);
@@ -973,7 +1012,7 @@ export async function crearOActualizarCobro(
     cliente_id: clienteId,
     periodo,
     estado: "pendiente" as CobroEstado,
-    fecha_vencimiento: new Date().toISOString().slice(0, 10),
+    fecha_vencimiento: hoyLocal(),
     ...(existing
       ? {
           monto: existing.monto,

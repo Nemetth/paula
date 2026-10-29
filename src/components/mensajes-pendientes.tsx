@@ -11,6 +11,7 @@ import { avisarConDeshacer } from "@/components/aviso-deshacer";
  * delivery, the move is one tap away too: send it, move it, the plan rebuilds. */
 export function MensajesPendientes({ mensajes }: { mensajes: MensajePendiente[] }) {
   const hoy = toISODate(new Date());
+  const marcarHecho = (id: string) => void marcarMensajeHecho(id, hoy).catch(console.error);
   return (
     <ul className="flex flex-col gap-2">
       {mensajes.map((m) => (
@@ -25,7 +26,7 @@ export function MensajesPendientes({ mensajes }: { mensajes: MensajePendiente[] 
                 href={m.enlace}
                 target="_blank"
                 rel="noreferrer"
-                onClick={() => marcarMensajeHecho(m.id, hoy)}
+                onClick={() => marcarHecho(m.id)}
                 className="tocable flex items-center gap-1.5 rounded-[10px] bg-verde px-3 py-1.5 text-[0.8125rem] font-medium text-white shadow-papel"
               >
                 <MessageCircle size={14} /> Abrir WhatsApp
@@ -34,7 +35,7 @@ export function MensajesPendientes({ mensajes }: { mensajes: MensajePendiente[] 
               <span className="py-1.5 text-[0.8125rem] text-ambar">Sin WhatsApp cargado</span>
             )}
             <button
-              onClick={() => marcarMensajeHecho(m.id, hoy)}
+              onClick={() => marcarHecho(m.id)}
               className="tocable rounded-[10px] border border-borde bg-bg-elevada px-3 py-1.5 text-[0.8125rem] font-medium hover:bg-borde/40"
             >
               Ya lo mandé

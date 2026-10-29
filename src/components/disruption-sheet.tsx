@@ -118,40 +118,47 @@ export function DisruptionSheet({
   async function aplicarAcciones(acciones: AccionAsistente[]): Promise<Deshacer> {
     const atras: Deshacer[] = [];
     const todas = [...tareasHoy, ...tareasProximas];
-    for (const a of acciones) {
-      if (a.tipo === "pasar_tareas") {
-        await posponerUnidades(a.unidadIds, a.fecha);
-        atras.push(async () => void (await Promise.all(a.unidadIds.map((id) => quitarPospuesta(id)))));
-      } else if (a.tipo === "marcar_hechas") {
-        for (const id of a.unidadIds) {
-          const asig = todas.find((t) => t.unidad.id === id);
-          if (!asig || !sePuedeTildar(asig.unidad)) continue;
-          const hecha = await completarUnidad(asig.unidad, { clients });
-          atras.push(() => deshacerHecha(hecha));
-        }
-      } else if (a.tipo === "no_trabajo") {
-        const ref = clients[0];
-        if (!ref) continue;
-        const id = await bloquearDia({ clienteId: ref.id, fecha: a.fecha, motivo: "no-trabaje" });
-        atras.push(() => desbloquearDia(id));
-      } else if (a.tipo === "tope_de_hoy") {
-        await guardarHorasDia(today, a.piezas);
-      } else if (a.tipo === "mover_grabacion") {
-        const antes = grabacionesPendientes.find((g) => g.id === a.grabacionId)?.fecha;
-        await actualizarGrabacion(a.grabacionId, { fecha: a.fecha });
-        if (antes) atras.push(() => actualizarGrabacion(a.grabacionId, { fecha: antes }));
-      } else if (a.tipo === "mover_entrega") {
-        const ids = await moverEntrega(a.clienteId, a.fechaActual, a.fechaNueva);
-        atras.push(() => actualizarPiezas(ids, { fechaEntrega: a.fechaActual }));
-      } else if (a.tipo === "pausar_cliente") {
-        const antes = clients.find((c) => c.id === a.clienteId)?.estado;
-        await actualizarCliente(a.clienteId, { estado: "en-pausa" });
-        if (antes) atras.push(() => actualizarCliente(a.clienteId, { estado: antes }));
-      }
-    }
-    return async () => {
+    const deshacerTodo = async () => {
       for (const f of atras.reverse()) await f();
     };
+    try {
+      for (const a of acciones) {
+        if (a.tipo === "pasar_tareas") {
+          await posponerUnidades(a.unidadIds, a.fecha);
+          atras.push(async () => void (await Promise.all(a.unidadIds.map((id) => quitarPospuesta(id)))));
+        } else if (a.tipo === "marcar_hechas") {
+          for (const id of a.unidadIds) {
+            const asig = todas.find((t) => t.unidad.id === id);
+            if (!asig || !sePuedeTildar(asig.unidad)) continue;
+            const hecha = await completarUnidad(asig.unidad, { clients });
+            atras.push(() => deshacerHecha(hecha));
+          }
+        } else if (a.tipo === "no_trabajo") {
+          const ref = clients[0];
+          if (!ref) continue;
+          const id = await bloquearDia({ clienteId: ref.id, fecha: a.fecha, motivo: "no-trabaje" });
+          atras.push(() => desbloquearDia(id));
+        } else if (a.tipo === "tope_de_hoy") {
+          await guardarHorasDia(today, a.piezas);
+        } else if (a.tipo === "mover_grabacion") {
+          const antes = grabacionesPendientes.find((g) => g.id === a.grabacionId)?.fecha;
+          await actualizarGrabacion(a.grabacionId, { fecha: a.fecha });
+          if (antes) atras.push(() => actualizarGrabacion(a.grabacionId, { fecha: antes }));
+        } else if (a.tipo === "mover_entrega") {
+          const ids = await moverEntrega(a.clienteId, a.fechaActual, a.fechaNueva);
+          atras.push(() => actualizarPiezas(ids, { fechaEntrega: a.fechaActual }));
+        } else if (a.tipo === "pausar_cliente") {
+          const antes = clients.find((c) => c.id === a.clienteId)?.estado;
+          await actualizarCliente(a.clienteId, { estado: "en-pausa" });
+          if (antes) atras.push(() => actualizarCliente(a.clienteId, { estado: antes }));
+        }
+      }
+    } catch (e) {
+      // All or nothing: what already went through is taken back before saying it failed.
+      await deshacerTodo().catch(() => undefined);
+      throw e;
+    }
+    return deshacerTodo;
   }
 
   return (
