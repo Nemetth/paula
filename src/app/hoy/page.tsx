@@ -34,7 +34,7 @@ import {
   useTareasHechas,
 } from "@/lib/supabase/data";
 import { useAvisos, usePlan } from "@/lib/supabase/use-plan";
-import { Asignacion, fmtPiezas, sugerirAdelanto } from "@/lib/domain/planner";
+import { Asignacion, sugerirAdelanto } from "@/lib/domain/planner";
 import { ItemHoy, armarHoy, estadoDelDia, racha, resumenDelDia } from "@/lib/domain/hoy";
 import { completarUnidad, deshacerHecha, sePuedeTildar } from "@/lib/domain/completar";
 import { fechaCorta, fromISODate, toISODate } from "@/lib/domain/dates";
@@ -401,10 +401,10 @@ export default function HoyPage() {
             Quedan los fijos y chequeos de todos los días: {hoy.hechas} de {hoy.total} hechos.
           </p>
         )}
-        {estado.tipo !== "bloqueado" && capacidad > 0 && (
+        {estado.tipo !== "bloqueado" && hoy.piezas > 0 && (
           <p className="mt-0.5 text-[0.8125rem] text-sobre-oscuro/65">
-            {`Tope de hoy: ${fmtPiezas(capacidad)} ${capacidad === 1 ? "pieza" : "piezas"}` +
-              (carga?.semaforo === "sobrecargado" ? " · hoy te pasás del tope, empezá por lo de arriba" : "")}
+            Hoy te tocan {hoy.piezas} {hoy.piezas === 1 ? "pieza" : "piezas"}.
+            {carga?.semaforo === "sobrecargado" && " Es un día cargado: arrancá por lo de arriba."}
           </p>
         )}
         {diasRacha >= 2 && (
@@ -674,6 +674,11 @@ function DetalleUnidad({ a, hoyISO }: { a: Asignacion; hoyISO: string }) {
           {unidad.tipo === "edicion" ? "entrega" : unidad.tipo === "guion" ? "antes de grabar, el" : "para el"}{" "}
           {fechaCorta(unidad.limite)}
         </span>
+      )}
+      {unidad.tipo === "ads-reporte" && (
+        <Link href="/ads" className="font-medium text-acento-texto hover:underline">
+          Escribir el análisis
+        </Link>
       )}
       {a.fecha !== hoyISO && <span>· planeada {fechaLarga(a.fecha)}</span>}
       {atrasada && (

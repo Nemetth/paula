@@ -3,11 +3,16 @@
 
 import {
   AdsEstadoCuenta,
+  AdsRegistro,
+  AdsReporte,
+  AdsReporteEstado,
   Client,
   ClienteEstado,
   ClienteTipo,
   DiaBloqueado,
+  EstadoEntrega,
   FlujoConfig,
+  PasoEntrega,
   Grabacion,
   PieceType,
   Pieza,
@@ -133,5 +138,54 @@ export function rowToGrabacion(r: GrabacionRow): Grabacion {
     tomas: r.tomas ?? [],
     alimenta: r.alimenta ?? [],
     notas: r.notas ?? undefined,
+  };
+}
+
+export type ReporteRow = {
+  id: string;
+  cliente_id: string;
+  periodo: string;
+  estado: AdsReporteEstado;
+  analisis: string | null;
+  estrategia: string | null;
+  enviado_en: string | null;
+};
+export function rowToReporte(r: ReporteRow): AdsReporte {
+  return {
+    id: r.id,
+    clienteId: r.cliente_id,
+    periodo: r.periodo,
+    estado: r.estado,
+    analisis: r.analisis ?? undefined,
+    estrategia: r.estrategia ?? undefined,
+    enviadoEn: r.enviado_en ?? undefined,
+  };
+}
+
+export type AdsRegistroRow = { id: string; cliente_id: string; tipo: AdsRegistro["tipo"]; ref: string; fecha: string };
+export function rowToAdsRegistro(r: AdsRegistroRow): AdsRegistro {
+  return { id: r.id, clienteId: r.cliente_id, tipo: r.tipo, ref: r.ref, fecha: r.fecha };
+}
+
+export type EstadoEntregaRow = {
+  id: string;
+  cliente_id: string;
+  paso: PasoEntrega | null;
+  paso_desde: string | null;
+  entregado_en: string | null;
+  link: string | null;
+  material_fecha: string | null;
+  material_llego: boolean | null;
+};
+export function rowToEstadoEntrega(r: EstadoEntregaRow): EstadoEntrega {
+  return {
+    id: r.id,
+    clienteId: r.cliente_id,
+    paso: r.paso ?? undefined,
+    pasoDesde: r.paso_desde ?? undefined,
+    entregadoEn: r.entregado_en ?? undefined,
+    link: r.link ?? undefined,
+    materialFecha: r.material_fecha ?? undefined,
+    materialLlego: r.material_llego ?? false,
   };
 }

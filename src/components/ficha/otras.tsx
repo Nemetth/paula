@@ -14,8 +14,9 @@ import {
   eliminarIdea,
   guardarChequeoAds,
   marcarIdeaUsada,
+  registrarAds,
 } from "@/lib/supabase/data";
-import { CADENCIA_REVISION_FONDO_DIAS, diasDesdeRevision } from "@/lib/domain/ads";
+import { diasDeRevision, enLaSemana, nombreDia, proximoRecambio, revisadaEstaSemana } from "@/lib/domain/ads";
 import { cobrosDelPeriodo, estadoCobro } from "@/lib/domain/cobros";
 import { Entrega, historialCliente } from "@/lib/domain/entregas";
 import { fromISODate, nombreMes, toISODate } from "@/lib/domain/dates";
@@ -26,9 +27,12 @@ import {
   AdsChequeo,
   AdsEstado,
   AdsEstadoCuenta,
+  AdsRegistro,
+  AdsReporte,
+  CADENCIA_RECAMBIO_DIAS,
   Client,
   Cobro,
-  DIAS_REFRESH_CREATIVOS,
+  EstructuraSemanal,
   Grabacion,
   Idea,
   Pieza,
@@ -57,7 +61,23 @@ const conEsquema = (url: string) => (/^https?:\/\//i.test(url) ? url : `https://
 
 // ---------- Ads ----------
 
-export function PanelAds({ cliente, chequeos, hoyISO }: { cliente: Client; chequeos: AdsChequeo[]; hoyISO: string }) {
+export function PanelAds({
+  cliente,
+  clients,
+  chequeos,
+  historial: registros,
+  reportes,
+  estructura,
+  hoyISO,
+}: {
+  cliente: Client;
+  clients: Client[];
+  chequeos: AdsChequeo[];
+  historial: AdsRegistro[];
+  reportes: AdsReporte[];
+  estructura: EstructuraSemanal;
+  hoyISO: string;
+}) {
   const { error, guardar } = useGuardar();
   const hoy = fromISODate(hoyISO);
 
@@ -73,12 +93,33 @@ export function PanelAds({ cliente, chequeos, hoyISO }: { cliente: Client; chequ
 
   const suyos = chequeos.filter((c) => c.clienteId === cliente.id).sort((a, b) => b.fecha.localeCompare(a.fecha));
   const deHoy = suyos.find((c) => c.fecha === hoyISO);
-  const historial = suyos.filter((c) => c.nota || c.estado === "revisar").slice(0, 20);
-  const diasFondo = diasDesdeRevision(cliente, hoy);
+  const notas = suyos.filter((c) => c.nota || c.estado === "revisar").slice(0, 20);
   const diasRefresh = cliente.adsRefreshCreativos
     ? differenceInCalendarDays(hoy, fromISODate(cliente.adsRefreshCreativos))
     : undefined;
-  const refreshVencido = diasRefresh === undefined || diasRefresh > DIAS_REFRESH_CREATIVOS;
+  const toca = proximoRecambio(cliente, clients, hoy);
+  const refreshVencido = toca <= hoyISO;
+  const pausada = cliente.adsEstadoCuenta === "pausada";
+  const diaRevision = diasDeRevision(clients, estructura).get(cliente.id);
+  const revisada = revisadaEstaSemana(cliente.id, registros, hoy);
+
+  /** The account's history: reviews, swaps, reports sent and the daily check notes, newest first. */
+  const historial = [
+    ...registros
+      .filter((r) => r.clienteId === cliente.id)
+      .map((r) => ({ id: r.id, fecha: r.fecha, que: r.tipo === "revision" ? "Revisión de anuncios" : "Recambio de anuncios", texto: undefined as string | undefined })),
+    ...reportes
+      .filter((r) => r.clienteId === cliente.id && r.estado === "enviado")
+      .map((r) => ({
+        id: r.id,
+        fecha: r.enviadoEn ?? `${r.periodo}-28`,
+        que: `Reporte de ${nombreMes(r.periodo, hoy)}`,
+        texto: [r.analisis, r.estrategia && `Estrategia: ${r.estrategia}`].filter(Boolean).join(" · ") || undefined,
+      })),
+    ...notas.map((c) => ({ id: c.id, fecha: c.fecha, que: c.estado === "revisar" ? "Chequeo · revisar" : "Chequeo", texto: c.nota })),
+  ]
+    .sort((a, b) => b.fecha.localeCompare(a.fecha))
+    .slice(0, 30);
 
   return (
     <>
@@ -126,29 +167,56 @@ export function PanelAds({ cliente, chequeos, hoyISO }: { cliente: Client; chequ
         </div>
       </Seccion>
 
-      <Seccion titulo="Creativos">
-        <div className="flex flex-col gap-2">
-          <p className={cn("text-[0.9375rem]", refreshVencido ? "font-medium text-acento-texto" : "text-texto-secundario")}>
-            {diasRefresh === undefined
-              ? "Sin fecha del último refresh."
-              : diasRefresh === 0
-                ? "Renovados hoy."
-                : `Último refresh hace ${diasRefresh} ${diasRefresh === 1 ? "día" : "días"}${refreshVencido ? `: pasaron más de ${DIAS_REFRESH_CREATIVOS}, toca renovarlos.` : "."}`}
-          </p>
-          <div className="flex gap-2">
-            <CampoFecha
-              valor={cliente.adsRefreshCreativos}
-              onGuardar={(f) => guardar(() => actualizarCliente(cliente.id, { adsRefreshCreativos: f }))}
-            />
-            <button
-              onClick={() => guardar(() => actualizarCliente(cliente.id, { adsRefreshCreativos: hoyISO }))}
-              className={`${botonPrimario} shrink-0`}
-            >
-              Renové hoy
-            </button>
+      {!pausada && (
+        <Seccion titulo="Rutinas" detalle="Aparecen solas en Hoy y en el Calendario.">
+          <div className="flex flex-col gap-3">
+            <p className="text-[0.9375rem]">
+              <span className="font-medium">Revisión semanal:</span>{" "}
+              {diaRevision === undefined ? (
+                "—"
+              ) : (
+                <span className={cn(!revisada && enLaSemana(hoy, diaRevision) < hoyISO && "font-medium text-acento-texto")}>
+                  los {nombreDia(diaRevision)}
+                  {revisada ? " · esta semana ya está" : enLaSemana(hoy, diaRevision) < hoyISO ? " · esta semana falta" : ""}
+                </span>
+              )}
+            </p>
+            <div className="flex flex-col gap-2">
+              <p className={cn("text-[0.9375rem]", refreshVencido ? "font-medium text-acento-texto" : "")}>
+                <span className="font-medium">Recambio de anuncios (cada {CADENCIA_RECAMBIO_DIAS} días):</span>{" "}
+                {diasRefresh === undefined
+                  ? "sin fecha del último."
+                  : diasRefresh === 0
+                    ? "renovados hoy."
+                    : `el último fue hace ${diasRefresh} ${diasRefresh === 1 ? "día" : "días"}${refreshVencido ? ", toca renovarlos." : `, el próximo el ${fecha(toca)}.`}`}
+              </p>
+              <div className="flex gap-2">
+                <CampoFecha
+                  valor={cliente.adsRefreshCreativos}
+                  onGuardar={(f) => guardar(() => actualizarCliente(cliente.id, { adsRefreshCreativos: f }))}
+                />
+                <button
+                  onClick={() =>
+                    guardar(async () => {
+                      await registrarAds({ clienteId: cliente.id, tipo: "recambio", ref: hoyISO, fecha: hoyISO });
+                      await actualizarCliente(cliente.id, { adsRefreshCreativos: hoyISO });
+                    })
+                  }
+                  className={`${botonPrimario} shrink-0`}
+                >
+                  Renové hoy
+                </button>
+              </div>
+            </div>
+            <p className="text-[0.9375rem]">
+              <span className="font-medium">Reporte mensual:</span> del 1 al 5 ·{" "}
+              <Link href="/ads" className="font-medium text-acento-texto">
+                Escribir en Ads
+              </Link>
+            </p>
           </div>
-        </div>
-      </Seccion>
+        </Seccion>
+      )}
 
       <Seccion titulo="Chequeo de hoy">
         <div className="flex flex-col gap-2">
@@ -189,31 +257,20 @@ export function PanelAds({ cliente, chequeos, hoyISO }: { cliente: Client; chequ
             aria-label="Nota del chequeo de hoy"
             className={`${campo} w-full`}
           />
-          <p className="text-[0.8125rem] text-texto-secundario">
-            Revisión a fondo:{" "}
-            <span className={cn("font-medium", diasFondo >= CADENCIA_REVISION_FONDO_DIAS && "text-acento-texto")}>
-              {diasFondo === Infinity ? "nunca" : diasFondo === 0 ? "hoy" : `hace ${diasFondo} d`}
-            </span>{" "}
-            · <Link href="/ads" className="font-medium text-acento-texto">Ir a Ads</Link>
-          </p>
         </div>
       </Seccion>
 
-      <Seccion titulo="Historial de chequeos">
+      <Seccion titulo="Historial de la cuenta" detalle="Cuándo la revisaste, cuándo renovaste los anuncios, qué reportes mandaste y las notas de los chequeos.">
         {historial.length === 0 ? (
-          <p className="text-[0.9375rem] text-texto-secundario">Las notas de cada chequeo aparecen acá.</p>
+          <p className="text-[0.9375rem] text-texto-secundario">Todavía no hay nada. Lo que vayas tildando aparece acá.</p>
         ) : (
           <ul className={listaFilas}>
-            {historial.map((c) => (
-              <li key={c.id} className="flex gap-3 px-2 py-2.5 text-[0.9375rem]">
-                <span className="numeros w-14 shrink-0 text-[0.8125rem] text-texto-secundario">{fecha(c.fecha)}</span>
+            {historial.map((h) => (
+              <li key={h.id} className="flex gap-3 px-2 py-2.5 text-[0.9375rem]">
+                <span className="numeros w-14 shrink-0 text-[0.8125rem] text-texto-secundario">{fecha(h.fecha)}</span>
                 <span className="min-w-0 flex-1">
-                  {c.estado === "revisar" && (
-                    <span className="mr-1.5 rounded-[8px] bg-acento/15 px-1.5 py-0.5 text-[0.75rem] font-medium text-acento-texto">
-                      revisar
-                    </span>
-                  )}
-                  {c.nota ?? <span className="text-texto-secundario">Sin nota</span>}
+                  <span className="font-medium">{h.que}</span>
+                  {h.texto && <span className="block text-[0.8125rem] text-texto-secundario">{h.texto}</span>}
                 </span>
               </li>
             ))}

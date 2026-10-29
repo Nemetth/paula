@@ -8,7 +8,22 @@ import { armarHoy, estadoDelDia, resumenDelDia } from "@/lib/domain/hoy";
 import { toISODate } from "@/lib/domain/dates";
 import { AdsChequeo, DEFAULT_ESTRUCTURA_SEMANAL, EstructuraSemanal, Tarea } from "@/lib/domain/types";
 import { NOMBRE, saludo } from "@/lib/domain/voz";
-import { BlockedRow, ClientRow, GrabacionRow, PiezaRow, rowToBlocked, rowToClient, rowToGrabacion, rowToPieza } from "@/lib/supabase/filas";
+import {
+  AdsRegistroRow,
+  BlockedRow,
+  ClientRow,
+  EstadoEntregaRow,
+  GrabacionRow,
+  PiezaRow,
+  ReporteRow,
+  rowToAdsRegistro,
+  rowToBlocked,
+  rowToClient,
+  rowToEstadoEntrega,
+  rowToGrabacion,
+  rowToPieza,
+  rowToReporte,
+} from "@/lib/supabase/filas";
 
 /** Paula's day, not the server's: Vercel runs on UTC. */
 const ZONA = "America/Argentina/Buenos_Aires";
@@ -37,6 +52,14 @@ async function tabla<T>(nombre: string, filtro?: { columna: string; valor: strin
   return (data ?? []) as T[];
 }
 
+/** A table added in a later migration: until it's run, read it as empty instead of failing the push. */
+async function tablaNueva<T>(nombre: string): Promise<T[]> {
+  return tabla<T>(nombre).catch((e) => {
+    console.error("[aviso-manana]", e);
+    return [];
+  });
+}
+
 export interface AvisoDelDia {
   titulo: string;
   cuerpo: string;
@@ -46,7 +69,7 @@ export async function avisoDelDia(ahora = new Date()): Promise<AvisoDelDia> {
   const today = hoyEnArgentina(ahora);
   const hoyISO = toISODate(today);
 
-  const [clientes, piezas, grabaciones, bloqueos, tareas, pospuestas, hechas, overrides, settings, chequeos, fijos] = await Promise.all([
+  const [clientes, piezas, grabaciones, bloqueos, tareas, pospuestas, hechas, overrides, settings, chequeos, fijos, reportes, adsHistorial, estados] = await Promise.all([
     tabla<ClientRow>("clients"),
     tabla<PiezaRow>("piezas"),
     tabla<GrabacionRow>("grabaciones"),
@@ -59,7 +82,11 @@ export async function avisoDelDia(ahora = new Date()): Promise<AvisoDelDia> {
     tabla<{ estructura_semanal: EstructuraSemanal }>("settings", { columna: "user_id", valor: "a871f9ba-7331-4af8-9914-26323e0edd1f" }),
     tabla<{ id: string; cliente_id: string; fecha: string; estado: AdsChequeo["estado"]; nota: string | null }>("ads_chequeos", { columna: "fecha", valor: hoyISO }),
     tabla<{ fijo_id: string; fecha: string }>("fijos_hechos", { columna: "fecha", valor: hoyISO }),
+    tabla<ReporteRow>("ads_reportes"),
+    tablaNueva<AdsRegistroRow>("ads_historial"),
+    tablaNueva<EstadoEntregaRow>("entregas_estado"),
   ]);
+  const estadosEntrega = estados.map(rowToEstadoEntrega);
 
   const clients = clientes.map(rowToClient);
   const lasPiezas = piezas.map(rowToPieza);
@@ -91,6 +118,9 @@ export async function avisoDelDia(ahora = new Date()): Promise<AvisoDelDia> {
     grabaciones: lasGrabaciones,
     blockedDates: bloqueos.map(rowToBlocked),
     tareas: lasTareas,
+    adsHistorial: adsHistorial.map(rowToAdsRegistro),
+    reportes: reportes.map(rowToReporte),
+    estadosEntrega,
     pospuestas: Object.fromEntries(pospuestas.map((p) => [p.id, p.hasta])),
     hechas: registros,
     dayOverride: overrides[0]?.horas_disponibles ?? null,
@@ -108,7 +138,7 @@ export async function avisoDelDia(ahora = new Date()): Promise<AvisoDelDia> {
     locales: new Set(),
   });
   const estado = estadoDelDia(hoy, plan.cargaPorDia[hoyISO]);
-  const entregas = calcularEntregas({ clients, piezas: lasPiezas, grabaciones: lasGrabaciones, plan, today });
+  const entregas = calcularEntregas({ clients, piezas: lasPiezas, grabaciones: lasGrabaciones, plan, today, estructura, estados: estadosEntrega });
 
   const cuerpo =
     estado.tipo === "bloqueado"

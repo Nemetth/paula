@@ -2,16 +2,30 @@
 // along it is (per piece type) and a traffic light read off the plan.
 
 import { differenceInCalendarDays } from "date-fns";
-import { grabacionDeLaPieza, inicioVentana, objetivoDe } from "./ciclos";
+import { grabacionDeLaPieza, idCiclo, inicioVentana, objetivoDe } from "./ciclos";
 import { fromISODate, toISODate } from "./dates";
 import { Asignacion, Plan } from "./planner";
-import { Client, Grabacion, ORDEN_TIPOS, PieceType, Pieza, grabaDe } from "./types";
+import {
+  Client,
+  DEFAULT_PESO_PIEZA,
+  EstadoEntrega,
+  EstructuraSemanal,
+  Grabacion,
+  ORDEN_TIPOS,
+  PASOS_SIN_APROBAR,
+  PieceType,
+  Pieza,
+  esperaGrabacionLaPieza,
+  pesosPieza,
+} from "./types";
 
 export { ORDEN_TIPOS };
 
 /** - verde: on track;
- * - ambar: due in a few days, or only fits by eating into the margin;
- * - rojo: overdue, or the plan can't make it by the delivery without going over the cap;
+ * - ambar: due in a few days, takes more than half of the room left, or only
+ *   fits by eating into the margin;
+ * - rojo: overdue, what is left doesn't fit in the days left even with all of
+ *   them for this client, or the plan can't make it without going over the cap;
  * - lista: every piece is done. */
 export type SemaforoEntrega = "verde" | "ambar" | "rojo" | "lista";
 
@@ -22,6 +36,8 @@ export interface AvanceTipo {
 
 export interface Entrega {
   clienteId: string;
+  /** The cycle it was generated for: where its step (paso) is kept. */
+  cicloId: string;
   fecha: string;
   /** When production starts: delivery minus the client's días de anticipación. */
   inicio: string;
@@ -32,14 +48,20 @@ export interface Entrega {
   faltan: number;
   porTipo: Partial<Record<PieceType, AvanceTipo>>;
   semaforo: SemaforoEntrega;
-  /** The client records and this cycle's recording isn't done: its pieces aren't in the plan yet. */
+  /** The client records and this cycle's recording isn't done: its reels aren't in the plan yet. */
   esperaGrabacion: boolean;
+  /** Its calendar is out for approval: none of its pieces are in the plan yet. */
+  esperaAprobacion: boolean;
+  /** Step, link, material: what Paula set for this delivery, if anything. */
+  estado?: EstadoEntrega;
   /** Days until the delivery (negative = overdue). */
   dias: number;
 }
 
 /** Due within this many days counts as urgent. */
 export const DIAS_URGENTE = 3;
+/** Taking more than this share of the room left before the delivery reads as tight. */
+const PARTE_JUSTA = 0.5;
 
 export function calcularEntregas(input: {
   clients: Client[];
@@ -47,8 +69,16 @@ export function calcularEntregas(input: {
   grabaciones: Grabacion[];
   plan: Plan;
   today: Date;
+  estructura?: EstructuraSemanal;
+  estados?: EstadoEntrega[];
 }): Entrega[] {
   const { clients, piezas, grabaciones, plan, today } = input;
+  const pesos = input.estructura ? pesosPieza(input.estructura) : DEFAULT_PESO_PIEZA;
+  const estados = new Map((input.estados ?? []).map((e) => [e.id, e]));
+  const hoyISO = toISODate(today);
+  /** Room from today up to a date, counting each day's whole cap. */
+  const lugarHasta = (fecha: string) =>
+    Object.values(plan.cargaPorDia).reduce((s, d) => (d.fecha >= hoyISO && d.fecha <= fecha ? s + d.capacidad : s), 0);
   const clientById = new Map(clients.map((c) => [c.id, c]));
 
   const grupos = new Map<string, { client: Client; fecha: string; piezas: Pieza[] }>();
@@ -81,22 +111,37 @@ export function calcularEntregas(input: {
       }
     }
     const pendientes = suyas.filter((p) => !p.hecha);
-    const esperaGrabacion =
-      grabaDe(client) && pendientes.some((p) => !grabacionDeLaPieza(p, client, grabaciones)?.hecha);
+    const cicloId = suyas.find((p) => p.cicloId)?.cicloId ?? idCiclo(client.id, fecha);
+    const estado = estados.get(cicloId);
+    const esperaAprobacion = !!estado?.paso && PASOS_SIN_APROBAR.includes(estado.paso);
+    const esperaGrabacion = pendientes.some(
+      (p) => esperaGrabacionLaPieza(client, p.tipo) && !grabacionDeLaPieza(p, client, grabaciones)?.hecha,
+    );
     const asigs = pendientes.flatMap((p) => asignacionesDe.get(p.id) ?? []);
     const dias = differenceInCalendarDays(fromISODate(fecha), today);
     const sinPlan = pendientes.some((p) => sinLugar.has(p.id));
     const inicio = inicioVentana(fecha, client);
-    const arranco = toISODate(today) >= inicio;
+    const arranco = hoyISO >= inicio;
+    // Pieces waiting on a recording or an approval still have to be done by the
+    // delivery: count them all, not only the ones the plan could place.
+    const falta = pendientes.reduce((s, p) => s + pesos[p.tipo], 0);
+    const lugar = arranco || dias <= DIAS_URGENTE ? lugarHasta(fecha) : Infinity;
 
     let semaforo: SemaforoEntrega;
     if (pendientes.length === 0) semaforo = "lista";
-    else if (dias < 0 || sinPlan || asigs.some((a) => a.atrasada || a.sobrecarga)) semaforo = "rojo";
-    else if (dias <= DIAS_URGENTE || (esperaGrabacion && arranco) || asigs.some((a) => a.enMargen)) semaforo = "ambar";
+    else if (dias < 0 || sinPlan || falta > lugar || asigs.some((a) => a.atrasada || a.sobrecarga)) semaforo = "rojo";
+    else if (
+      dias <= DIAS_URGENTE ||
+      falta > lugar * PARTE_JUSTA ||
+      ((esperaGrabacion || esperaAprobacion) && arranco) ||
+      asigs.some((a) => a.enMargen)
+    )
+      semaforo = "ambar";
     else semaforo = "verde";
 
     out.push({
       clienteId: client.id,
+      cicloId,
       fecha,
       inicio,
       objetivo: objetivoDe(fecha, client),
@@ -106,6 +151,8 @@ export function calcularEntregas(input: {
       porTipo,
       semaforo,
       esperaGrabacion,
+      esperaAprobacion,
+      estado,
       dias,
     });
   }

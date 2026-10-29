@@ -15,9 +15,10 @@ const GRUPO_LABEL: Record<AlertaGrupo, string> = {
   atraso: "Atrasos",
   carga: "Sobrecarga",
   grabacion: "Esperan grabación",
+  entrega: "Entregas",
   ads: "Ads",
 };
-const GRUPO_ORDEN: AlertaGrupo[] = ["carga", "atraso", "grabacion", "ads"];
+const GRUPO_ORDEN: AlertaGrupo[] = ["carga", "atraso", "entrega", "grabacion", "ads"];
 
 const campo = "input";
 const etiqueta = "text-[0.8125rem] font-medium text-texto-secundario";

@@ -3,9 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
-import { DiaCalendario, colorCliente, diasDeLaSemana } from "@/lib/domain/calendario";
+import { DiaCalendario, colorCliente, diasDeLaSemana, textoCarga } from "@/lib/domain/calendario";
 import { toISODate } from "@/lib/domain/dates";
-import { fmtPiezas } from "@/lib/domain/planner";
 import { Client } from "@/lib/domain/types";
 import { IconoHito } from "@/components/entrega";
 import { BotonPrimario, Sheet } from "@/components/sheet";
@@ -85,11 +84,11 @@ export function VistaSemana({
                   </p>
                   <span
                     className={cn("h-2.5 w-2.5 rounded-full", SEMAFORO[carga?.semaforo ?? "sin-capacidad"])}
-                    title={carga ? `${fmtPiezas(carga.carga)} de ${fmtPiezas(carga.capacidad)} piezas` : "Fuera del plan"}
+                    title={carga ? textoCarga({ tareas: info?.tareas ?? [], carga }) : "Fuera del plan"}
                   />
                 </header>
                 <p className="mb-2 text-[0.8125rem] text-texto-secundario">
-                  {carga ? `${fmtPiezas(carga.carga)} / ${fmtPiezas(carga.capacidad)} piezas` : "—"}
+                  {carga ? textoCarga({ tareas: info?.tareas ?? [], carga }) : "—"}
                 </p>
 
                 {info?.hitos.map((h, i) => (

@@ -24,21 +24,25 @@ import {
   configCiclo,
   entregaDesde,
   entregaSiguiente,
+  ENTREGAS_POR_MES,
+  TipoCiclo,
   grabacionDeLaPieza,
+  idCiclo,
   inicioVentana,
   objetivoDe,
-  tipoCicloDe,
 } from "./ciclos";
 import { fechaCorta, fromISODate, toISODate } from "./dates";
 import {
   Client,
   DiaBloqueado,
+  EstadoEntrega,
   EstructuraSemanal,
   Grabacion,
+  PASOS_SIN_APROBAR,
   PieceType,
   Pieza,
   diasDeTrabajo,
-  grabaDe,
+  esperaGrabacionLaPieza,
   margenDe,
   pesosPieza,
   topeDelDia,
@@ -47,14 +51,14 @@ import {
 // ---------- public types ----------
 
 /** What kind of work a unit is. */
-export type TipoUnidad = "edicion" | "guion" | "ideas" | "ads-fondo" | "tarea";
+export type TipoUnidad = "edicion" | "guion" | "ideas" | "ads-revision" | "ads-recambio" | "ads-reporte" | "tarea";
 
 /** Postponement class. When something doesn't fit, lower ranks give way first:
- * Ads a fondo → ideas → producción. Intocable units (fixed dailies, Deluxe)
- * are never moved. */
-export type Categoria = "ads-fondo" | "ideas" | "produccion";
+ * the weekly Ads review → ideas → producción. Intocable units (fixed dailies,
+ * Deluxe) are never moved. */
+export type Categoria = "ads" | "ideas" | "produccion";
 
-const RANK: Record<Categoria, number> = { "ads-fondo": 0, ideas: 1, produccion: 2 };
+const RANK: Record<Categoria, number> = { ads: 0, ideas: 1, produccion: 2 };
 
 export interface UnidadTrabajo {
   id: string;
@@ -110,7 +114,7 @@ export interface Hito {
   detalle: string;
 }
 
-export type AlertaTipo = "vencida" | "sobrecarga" | "no-entra" | "usa-margen" | "espera-grabacion";
+export type AlertaTipo = "vencida" | "sobrecarga" | "no-entra" | "usa-margen" | "espera-grabacion" | "espera-aprobacion";
 
 export interface Alerta {
   tipo: AlertaTipo;
@@ -147,7 +151,9 @@ export interface PlannerInput {
   estructura: EstructuraSemanal;
   /** Explicit cap in pieces for a date (the "hoy puedo menos" override). */
   overrides?: Record<string, number>;
-  /** Extra units from other modules (Ads reviews, loose tasks, ...). */
+  /** Where each delivery is in its flow: pieces of a calendar not approved yet wait. */
+  estadosEntrega?: EstadoEntrega[];
+  /** Extra units from other modules (Ads routines, loose tasks, ...). */
   extras?: UnidadTrabajo[];
   /** Units moved to a later day ("pasar a mañana"): unit id → first day it can be worked. */
   pospuestas?: Record<string, string>;
@@ -189,6 +195,9 @@ function unidadesDePiezas(input: PlannerInput, alertas: Alerta[]): UnidadTrabajo
   const unidades: UnidadTrabajo[] = [];
   /** Pieces whose window is open but whose recording isn't done, per client. */
   const esperan = new Map<string, { n: number; grabacion?: Grabacion }>();
+  /** Pieces of a delivery whose calendar isn't approved yet, per cycle. */
+  const sinAprobar = new Map<string, { clienteId: string; entrega?: string; n: number }>();
+  const pasos = new Map((input.estadosEntrega ?? []).map((e) => [e.id, e.paso]));
 
   for (const p of piezas) {
     const client = clientById.get(p.clienteId);
@@ -196,6 +205,16 @@ function unidadesDePiezas(input: PlannerInput, alertas: Alerta[]): UnidadTrabajo
 
     const entrega = p.fechaEntrega;
     const inicio = entrega ? inicioVentana(entrega, client) : undefined;
+
+    // Marking the calendar approved is what lets a delivery's pieces in.
+    const ciclo = p.cicloId ?? (entrega ? idCiclo(p.clienteId, entrega) : undefined);
+    const paso = ciclo ? pasos.get(ciclo) : undefined;
+    if (ciclo && paso && PASOS_SIN_APROBAR.includes(paso)) {
+      const e = sinAprobar.get(ciclo) ?? { clienteId: p.clienteId, entrega, n: 0 };
+      e.n += 1;
+      sinAprobar.set(ciclo, e);
+      continue;
+    }
     const desdeBase = maxISO(todayISO, p.noAntesDe, inicio);
     const etiquetaBase = p.titulo ?? p.tipo;
 
@@ -215,7 +234,7 @@ function unidadesDePiezas(input: PlannerInput, alertas: Alerta[]): UnidadTrabajo
       intocable: client.intocable,
     });
 
-    if (!grabaDe(client)) {
+    if (!esperaGrabacionLaPieza(client, p.tipo)) {
       unidades.push(edicion(desdeBase, "Producir"));
       continue;
     }
@@ -261,8 +280,18 @@ function unidadesDePiezas(input: PlannerInput, alertas: Alerta[]): UnidadTrabajo
       clienteId,
       fecha: grabacion?.fecha,
       mensaje: grabacion
-        ? `${nombre}: ${plural(n, "pieza espera", "piezas esperan")} la grabación del ${fechaCorta(grabacion.fecha)}. Marcala como hecha para que entren al plan`
-        : `${nombre}: ${plural(n, "pieza espera", "piezas esperan")} una grabación, y no hay ninguna cargada`,
+        ? `${nombre}: ${plural(n, "reel espera", "reels esperan")} la grabación del ${fechaCorta(grabacion.fecha)}. Marcala como hecha para que entren al plan`
+        : `${nombre}: ${plural(n, "reel espera", "reels esperan")} una grabación, y no hay ninguna cargada`,
+    });
+  }
+
+  for (const { clienteId, entrega, n } of sinAprobar.values()) {
+    const nombre = clientById.get(clienteId)?.nombre ?? "Cliente";
+    alertas.push({
+      tipo: "espera-aprobacion",
+      clienteId,
+      fecha: entrega,
+      mensaje: `${nombre}: ${plural(n, "pieza espera", "piezas esperan")} que apruebe el calendario${entrega ? ` (entrega ${fechaCorta(entrega)})` : ""}. Cuando lo marques aprobado entran al plan`,
     });
   }
 
@@ -275,6 +304,7 @@ function unidadesDeCalendario(input: PlannerInput): UnidadTrabajo[] {
   const { clients, today } = input;
   const hoy = toISODate(today);
   const hechas = new Set(input.unidadesHechas ?? []);
+  const conPaso = new Set((input.estadosEntrega ?? []).filter((e) => e.paso).map((e) => e.id));
   const unidades: UnidadTrabajo[] = [];
 
   for (const client of clients) {
@@ -289,7 +319,8 @@ function unidadesDeCalendario(input: PlannerInput): UnidadTrabajo[] {
     if (hoy < toISODate(addDays(fromISODate(inicio), -DIAS_CALENDARIO))) continue;
 
     const id = `${client.id}:calendario:${entrega}`;
-    if (hechas.has(id)) continue;
+    // Done once ticked, or once Paula already moved that delivery along its steps.
+    if (hechas.has(id) || conPaso.has(idCiclo(client.id, entrega))) continue;
     const limite = maxISO(hoy, toISODate(addDays(fromISODate(inicio), -1)));
     unidades.push({
       id,
@@ -436,7 +467,8 @@ export function planificar(input: PlannerInput): Plan {
       unidad: u,
       fecha: s.fecha,
       atrasada,
-      enMargen: !atrasada && !!u.objetivo && s.fecha > u.objetivo,
+      // The margin is the room between target and deadline: work with no deadline has none.
+      enMargen: !atrasada && !!u.objetivo && !!u.limite && s.fecha > u.objetivo,
       sobrecarga,
     });
   }
@@ -761,19 +793,17 @@ export function atrasadasProximas(plan: Plan, hoyISO: string): Asignacion[] {
 }
 
 /** Rough monthly load of a client volume against Paula's monthly capacity, in
- * pieces. A weekly client's volume is per week, so it counts ~4.3 times. */
+ * pieces. The volume is per delivery: a weekly client's counts ~4.3 times, a
+ * twice-a-month one's twice. */
 export function simularCargaPiezas(
   volumen: { historias: number; posteos: number; reels: number },
   estructura: EstructuraSemanal,
-  semanal = false,
+  ciclo: TipoCiclo = "mensual",
 ): { piezasMes: number; capacidadMes: number } {
   const pesos = pesosPieza(estructura);
   const porCiclo = volumen.historias * pesos.historia + volumen.posteos * pesos.posteo + volumen.reels * pesos.reel;
-  const piezasMes = semanal ? porCiclo * 4.3 : porCiclo;
+  const piezasMes = porCiclo * ENTREGAS_POR_MES[ciclo];
   const capacidadSemana = diasDeTrabajo(estructura).reduce((suma, d) => suma + topeDelDia(estructura, d), 0);
   const capacidadMes = Math.round(capacidadSemana * 4.3);
   return { piezasMes: Math.round(piezasMes * 10) / 10, capacidadMes };
 }
-
-/** Whether a client's volume is per week. */
-export const esSemanal = (client: Client) => tipoCicloDe(client) === "semanal";

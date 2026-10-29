@@ -41,7 +41,9 @@ export function resumenUnidades(unidades: UnidadTrabajo[]): string {
   const guiones = unidades.filter((u) => u.tipo === "guion").length;
   if (guiones > 0) partes.push(`${guiones} ${guiones === 1 ? "guion" : "guiones"}`);
   if (unidades.some((u) => u.tipo === "ideas")) partes.push("calendario de ideas");
-  if (unidades.some((u) => u.tipo === "ads-fondo")) partes.push("revisión de Ads");
+  if (unidades.some((u) => u.tipo === "ads-revision")) partes.push("revisión de anuncios");
+  if (unidades.some((u) => u.tipo === "ads-recambio")) partes.push("recambio de anuncios");
+  if (unidades.some((u) => u.tipo === "ads-reporte")) partes.push("reporte de Ads");
   for (const u of unidades) if (u.tipo === "tarea") partes.push(u.etiqueta);
   return partes.join(", ");
 }
@@ -79,6 +81,8 @@ export interface Hoy {
   items: ItemHoy[];
   total: number;
   hechas: number;
+  /** Pieces (historias, posteos, reels) on today's list, done or not: "Hoy te tocan 4 piezas". */
+  piezas: number;
   /** Late work the plan can only fit on a later day, most important first. */
   atrasadas: Asignacion[];
 }
@@ -215,6 +219,9 @@ export function armarHoy(input: {
     items,
     total: items.length,
     hechas: items.filter((i) => i.hecha).length,
+    piezas: items.filter(
+      (i) => (i.tipo === "unidad" && i.asignacion.unidad.tipo === "edicion") || (i.tipo === "registro" && i.registro.tipo === "edicion"),
+    ).length,
     atrasadas: atrasadasProximas(plan, hoyISO)
       .filter((a) => !enRegistro.has(a.unidad.id))
       .sort(porImportancia),

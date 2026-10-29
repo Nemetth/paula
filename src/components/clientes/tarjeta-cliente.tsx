@@ -11,13 +11,22 @@ import {
   crearGrabacion,
   crearOActualizarCobro,
 } from "@/lib/supabase/data";
-import { DEFAULT_ANTICIPACION, anticipacionDe, configCiclo, inicioVentana, proximaEntrega, tipoCicloDe } from "@/lib/domain/ciclos";
+import {
+  DEFAULT_ANTICIPACION,
+  POR_CICLO,
+  TipoCiclo,
+  anticipacionDe,
+  configCiclo,
+  inicioVentana,
+  proximaEntrega,
+  tipoCicloDe,
+} from "@/lib/domain/ciclos";
 import { Entrega } from "@/lib/domain/entregas";
 import { fechaCorta, fromISODate, toISODate } from "@/lib/domain/dates";
-import { ESTADO_CUENTA_ADS_LABEL } from "@/lib/domain/labels";
+import { ESTADO_CUENTA_ADS_LABEL, PASO_ENTREGA_LABEL } from "@/lib/domain/labels";
 import { Client, Cobro, FlujoConfig, Grabacion, Pieza, Servicio, VolumenMensual, grabaDe, margenDe } from "@/lib/domain/types";
 import { AvancePorTipo, SEMAFORO_ENTREGA, SemaforoPunto } from "@/components/entrega";
-import { DIAS_SEMANA } from "@/components/cliente-form";
+import { CICLO_LABEL, DIAS_SEMANA, cambioDeCiclo } from "@/components/cliente-form";
 import { cn } from "@/lib/utils";
 
 const SERVICIO_LABEL: Record<Servicio, string> = {
@@ -76,7 +85,9 @@ export function TarjetaCliente({
   const graba = hace && grabaDe(cliente);
   const v = cliente.volumenMensual;
   const pausado = !cliente.activo || cliente.estado === "en-pausa";
-  const semanal = tipoCicloDe(cliente) === "semanal";
+  const tipoCiclo = tipoCicloDe(cliente);
+  const semanal = tipoCiclo === "semanal";
+  const porCiclo = POR_CICLO[tipoCiclo];
   const sinDia = hace && !configCiclo(cliente);
 
   // With no pieces yet the delivery still comes from the cycle settings.
@@ -110,14 +121,14 @@ export function TarjetaCliente({
     void guardar(() => actualizarCliente(cliente.id, { flujo: { ...cliente.flujo, ...cambios } }));
   }
 
-  /** A number field that saves on blur, only when it really changed. */
-  function numero(valor: number, onGuardar: (n: number) => void, props: { min: number; max: number }) {
+  /** A number field that saves on blur, only when it really changed. Empty when there is no value yet. */
+  function numero(valor: number | undefined, onGuardar: (n: number) => void, props: { min: number; max: number; placeholder?: string }) {
     return (
       <input
-        key={valor}
+        key={valor ?? "vacio"}
         type="number"
         {...props}
-        defaultValue={valor}
+        defaultValue={valor ?? ""}
         onBlur={(e) => {
           const n = Math.floor(Number(e.target.value));
           if (e.target.value !== "" && Number.isFinite(n) && n >= props.min && n <= props.max && n !== valor) onGuardar(n);
@@ -146,10 +157,11 @@ export function TarjetaCliente({
             {hace && (
               <span className="numeros">
                 · {cantidad(v.historias, "historia", "historias")} · {cantidad(v.posteos, "posteo", "posteos")} ·{" "}
-                {cantidad(v.reels, "reel", "reels")} {semanal ? "por semana" : "por mes"}
+                {cantidad(v.reels, "reel", "reels")} {porCiclo}
               </span>
             )}
-            {hace && <span>· {graba ? "graba" : "sin grabación"}</span>}
+            {hace && <span>· {graba ? "graba reels" : "sin grabación"}</span>}
+            {hace && entrega?.estado?.paso && <span>· {PASO_ENTREGA_LABEL[entrega.estado.paso].toLowerCase()}</span>}
           </p>
 
           {hace && entrega && (
@@ -223,7 +235,7 @@ export function TarjetaCliente({
                   ).map(([campo, label]) => (
                     <label key={campo} className="flex flex-col gap-1">
                       <span className={etiqueta}>
-                        {label} {semanal ? "por semana" : "por mes"}
+                        {label} {porCiclo}
                       </span>
                       {numero(v[campo], (n) => setVolumen(campo, n), { min: 0, max: 200 })}
                     </label>
@@ -239,7 +251,7 @@ export function TarjetaCliente({
                     onChange={(e) => setFlujo({ tieneGrabacion: e.target.checked })}
                     className="h-[16px] w-[16px] accent-[var(--color-oscuro)]"
                   />
-                  Graba para este cliente
+                  Graba reels para este cliente
                 </label>
               </>
             )}
@@ -253,17 +265,25 @@ export function TarjetaCliente({
                 <label className="flex flex-col gap-1">
                   <span className={etiqueta}>Entrega</span>
                   <select
-                    value={semanal ? "semanal" : "mensual"}
-                    onChange={(e) => setFlujo({ cicloTipo: e.target.value as "mensual" | "semanal", diaEntrega: undefined, diasAnticipacion: undefined })}
+                    value={tipoCiclo}
+                    onChange={(e) => setFlujo(cambioDeCiclo(cliente.flujo, e.target.value as TipoCiclo))}
                     className="input"
                   >
-                    <option value="mensual">Por mes</option>
-                    <option value="semanal">Por semana</option>
+                    {(Object.keys(CICLO_LABEL) as TipoCiclo[]).map((t) => (
+                      <option key={t} value={t}>
+                        {CICLO_LABEL[t]}
+                      </option>
+                    ))}
                   </select>
                 </label>
                 <label className="flex flex-col gap-1">
-                  <span className={etiqueta}>{semanal ? "Qué día" : "Día del mes"}</span>
-                  {semanal ? (
+                  <span className={etiqueta}>{semanal ? "Qué día" : tipoCiclo === "quincenal" ? "Días del mes" : "Día del mes"}</span>
+                  {tipoCiclo === "quincenal" ? (
+                    <span className="grid grid-cols-2 gap-2">
+                      {numero(cliente.flujo.diaEntrega, (n) => setFlujo({ diaEntrega: n }), { min: 1, max: 31, placeholder: "1" })}
+                      {numero(cliente.flujo.diaEntrega2, (n) => setFlujo({ diaEntrega2: n }), { min: 1, max: 31, placeholder: "15" })}
+                    </span>
+                  ) : semanal ? (
                     <select
                       value={cliente.flujo.diaEntrega ?? ""}
                       onChange={(e) => e.target.value !== "" && setFlujo({ diaEntrega: Number(e.target.value) })}
@@ -277,7 +297,7 @@ export function TarjetaCliente({
                       ))}
                     </select>
                   ) : (
-                    numero(cliente.flujo.diaEntrega ?? 0, (n) => setFlujo({ diaEntrega: n }), { min: 1, max: 31 })
+                    numero(cliente.flujo.diaEntrega, (n) => setFlujo({ diaEntrega: n }), { min: 1, max: 31, placeholder: "Elegí" })
                   )}
                 </label>
                 <label className="flex flex-col gap-1">
@@ -290,8 +310,8 @@ export function TarjetaCliente({
                 </label>
               </div>
               <span className="text-[0.75rem] text-texto-secundario">
-                Por defecto arranca {DEFAULT_ANTICIPACION[semanal ? "semanal" : "mensual"]} días antes. Las piezas se reparten
-                parejas entre el arranque y la entrega menos el margen.
+                Por defecto arranca {DEFAULT_ANTICIPACION[tipoCiclo]} días antes. Las piezas se reparten parejas entre el
+                arranque y la entrega menos el margen.
               </span>
             </section>
           )}
@@ -329,7 +349,7 @@ export function TarjetaCliente({
                       onGuardar={(fecha) => void guardar(() => actualizarGrabacion(proximaGrabacion.id, { fecha }))}
                     />
                     <span className="text-[0.75rem] text-texto-secundario">
-                      Bloquea ese día. Las piezas de la entrega entran al plan cuando la marcás como hecha en la ficha.
+                      Bloquea ese día. Los reels de la entrega entran al plan cuando la marcás como hecha en la ficha.
                     </span>
                   </>
                 ) : (

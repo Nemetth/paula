@@ -15,11 +15,13 @@ import { MensajePendiente, mensajesPendientes } from "@/lib/domain/mensajes";
 import { Plan, PlannerInput } from "@/lib/domain/planner";
 import { toISODate } from "@/lib/domain/dates";
 import {
+  AdsRegistro,
   AdsReporte,
   Ciclo,
   Client,
   Cobro,
   DEFAULT_ESTRUCTURA_SEMANAL,
+  EstadoEntrega,
   EstructuraSemanal,
   Grabacion,
   Pieza,
@@ -27,12 +29,14 @@ import {
 } from "@/lib/domain/types";
 import {
   abrirCiclo,
+  useAdsHistorial,
   useAdsReportes,
   useBlockedDates,
   useCiclos,
   useClients,
   useCobros,
   useDayOverride,
+  useEstadosEntrega,
   useEstructuraSemanal,
   useGrabaciones,
   useMensajesHechos,
@@ -59,6 +63,8 @@ export interface PlanContext {
   grabaciones: Grabacion[];
   cobros: Cobro[];
   reportes: AdsReporte[];
+  adsHistorial: AdsRegistro[];
+  estadosEntrega: EstadoEntrega[];
   tareas: Tarea[];
   estructura: EstructuraSemanal;
 }
@@ -91,6 +97,8 @@ function useCalcularPlan(): PlanContext | null {
   const blockedDates = useBlockedDates();
   const cobros = useCobros();
   const reportes = useAdsReportes();
+  const adsHistorial = useAdsHistorial();
+  const estadosEntrega = useEstadosEntrega();
   const tareas = useTareas();
   const pospuestas = usePospuestas();
   const hechas = useTodasLasHechas();
@@ -98,7 +106,7 @@ function useCalcularPlan(): PlanContext | null {
   const estructuraGuardada = useEstructuraSemanal();
 
   // Tables come back as fresh arrays on every render; key the plan on their content.
-  const firma = JSON.stringify([clients, piezas, ciclos, grabaciones, blockedDates, cobros, reportes, tareas, pospuestas, hechas, dayOverride, estructuraGuardada]);
+  const firma = JSON.stringify([clients, piezas, ciclos, grabaciones, blockedDates, cobros, reportes, adsHistorial, estadosEntrega, tareas, pospuestas, hechas, dayOverride, estructuraGuardada]);
 
   return useMemo(() => {
     if (
@@ -109,6 +117,8 @@ function useCalcularPlan(): PlanContext | null {
       !blockedDates ||
       !cobros ||
       !reportes ||
+      !adsHistorial ||
+      !estadosEntrega ||
       !tareas ||
       !pospuestas ||
       !hechas ||
@@ -125,6 +135,9 @@ function useCalcularPlan(): PlanContext | null {
       grabaciones,
       blockedDates,
       tareas,
+      adsHistorial,
+      reportes,
+      estadosEntrega,
       pospuestas,
       hechas,
       dayOverride,
@@ -136,13 +149,15 @@ function useCalcularPlan(): PlanContext | null {
       todayISO,
       plan,
       entrada,
-      entregas: calcularEntregas({ clients, piezas, grabaciones, plan, today }),
+      entregas: calcularEntregas({ clients, piezas, grabaciones, plan, today, estructura, estados: estadosEntrega }),
       clients,
       piezas,
       ciclos,
       grabaciones,
       cobros,
       reportes,
+      adsHistorial,
+      estadosEntrega,
       tareas,
       estructura,
     };

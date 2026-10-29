@@ -2,7 +2,7 @@
 
 import { differenceInCalendarDays, format } from "date-fns";
 import { es } from "date-fns/locale";
-import { fromISODate, toISODate } from "./dates";
+import { fromISODate } from "./dates";
 import { cobrosVencidos } from "./cobros";
 import { Entrega } from "./entregas";
 import { cantidadPiezas } from "./labels";
@@ -59,9 +59,9 @@ export function textoMensaje(
       return `${saludo} Para ir avanzando con tu contenido necesito que me mandes el material (fotos, videos y lo que tengas). Cuando lo tengas me avisás. Gracias!`;
     case "avisar-grabacion": {
       const cuando = fechaGrabacion
-        ? format(fromISODate(fechaGrabacion), "EEEE d 'de' MMMM", { locale: es })
-        : "la fecha que quedamos";
-      return `${saludo} Te confirmo la grabación para el ${cuando}. Cualquier cambio avisame con tiempo para reacomodar todo.`;
+        ? `para el ${format(fromISODate(fechaGrabacion), "EEEE d 'de' MMMM", { locale: es })}`
+        : "en la fecha que quedamos";
+      return `${saludo} Te confirmo la grabación ${cuando}. Cualquier cambio avisame con tiempo para reacomodar todo.`;
     }
     case "recordar-aprobacion":
       return `${saludo} Te recuerdo que estoy esperando tu aprobación para poder seguir con la producción. Apenas la tengas me avisás!`;
@@ -124,7 +124,7 @@ export function mensajesPendientes(input: {
   /** When given, adds "la entrega está lista" for deliveries just finished. */
   entregas?: Entrega[];
 }): MensajePendiente[] {
-  const { today, clients, piezas, grabaciones, cobros, hechos, plan, entregas } = input;
+  const { today, clients, grabaciones, cobros, hechos, plan, entregas } = input;
   const out: MensajePendiente[] = [];
   const activos = clients.filter((c) => c.activo && c.estado !== "en-pausa");
 
@@ -167,10 +167,20 @@ export function mensajesPendientes(input: {
   const semana = format(today, "RRRR-'W'II");
   for (const c of activos) {
     if (c.estado === "esperando-aprobacion") agregar("recordar-aprobacion", c, semana);
+  }
 
-    if (c.tipo === "material-cliente") {
-      const conMaterial = piezas.some((p) => p.clienteId === c.id && !p.hecha);
-      if (!conMaterial && c.estado === "en-produccion") agregar("pedir-material", c, toISODate(today).slice(0, 7));
+  // Per delivery: a calendar sent and not approved within the client's days,
+  // and material that is due in two days or late.
+  for (const e of entregas ?? []) {
+    const cliente = activos.find((c) => c.id === e.clienteId);
+    const estado = e.estado;
+    if (!cliente || !estado || e.semaforo === "lista") continue;
+    if (estado.paso === "calendario-enviado" && estado.pasoDesde) {
+      const esperando = differenceInCalendarDays(today, fromISODate(estado.pasoDesde));
+      if (esperando >= Math.max(cliente.flujo.diasAprobacion ?? 2, 1)) agregar("recordar-aprobacion", cliente, e.cicloId);
+    }
+    if (cliente.tipo === "material-cliente" && estado.materialFecha && !estado.materialLlego) {
+      if (differenceInCalendarDays(fromISODate(estado.materialFecha), today) <= 2) agregar("pedir-material", cliente, e.cicloId);
     }
   }
 

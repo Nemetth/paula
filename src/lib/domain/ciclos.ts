@@ -11,29 +11,42 @@ import { addDays, addMonths, getDaysInMonth, startOfDay, startOfMonth, subMonths
 import { fromISODate, toISODate } from "./dates";
 import { Ciclo, Client, Grabacion, ORDEN_TIPOS, PieceType, Pieza, margenDe } from "./types";
 
-export type TipoCiclo = "mensual" | "semanal";
+export type TipoCiclo = "mensual" | "quincenal" | "semanal";
 
-export const DEFAULT_ANTICIPACION: Record<TipoCiclo, number> = { mensual: 15, semanal: 7 };
+export const DEFAULT_ANTICIPACION: Record<TipoCiclo, number> = { mensual: 15, quincenal: 10, semanal: 7 };
+
+/** How many deliveries fall in a month, to turn a volume per delivery into a monthly one. */
+export const ENTREGAS_POR_MES: Record<TipoCiclo, number> = { mensual: 1, quincenal: 2, semanal: 4.3 };
+
+/** "por mes", "por quincena", "por semana". */
+export const POR_CICLO: Record<TipoCiclo, string> = { mensual: "por mes", quincenal: "por quincena", semanal: "por semana" };
 
 export interface ConfigCiclo {
   tipo: TipoCiclo;
-  /** Day of the month (mensual) or weekday, 0 = Sunday (semanal). */
+  /** Day of the month (mensual, quincenal) or weekday, 0 = Sunday (semanal). */
   dia: number;
+  /** The second day of the month of a twice-a-month client. */
+  dia2?: number;
 }
 
 export function tipoCicloDe(client: Client): TipoCiclo {
-  return client.flujo.cicloTipo === "semanal" ? "semanal" : "mensual";
+  const t = client.flujo.cicloTipo;
+  return t === "semanal" || t === "quincenal" ? t : "mensual";
 }
 
 export function anticipacionDe(client: Client): number {
   return Math.max(client.flujo.diasAnticipacion ?? DEFAULT_ANTICIPACION[tipoCicloDe(client)], 0);
 }
 
+const valido = (n?: number): n is number => n != null && Number.isFinite(n);
+
 /** Undefined while the client has no delivery day: it can't be planned yet. */
 export function configCiclo(client: Client): ConfigCiclo | undefined {
-  const dia = client.flujo.diaEntrega;
-  if (dia == null || !Number.isFinite(dia)) return undefined;
-  return { tipo: tipoCicloDe(client), dia };
+  const { diaEntrega: dia, diaEntrega2: dia2 } = client.flujo;
+  const tipo = tipoCicloDe(client);
+  if (!valido(dia)) return undefined;
+  if (tipo === "quincenal") return valido(dia2) ? { tipo, dia: Math.min(dia, dia2), dia2: Math.max(dia, dia2) } : undefined;
+  return { tipo, dia };
 }
 
 /** The delivery of `d`'s month; a day past the month's end falls on its last day. */
@@ -45,14 +58,17 @@ function entregaDelMes(d: Date, dia: number): Date {
 export function entregaDesde(cfg: ConfigCiclo, desde: Date): string {
   const d = startOfDay(desde);
   if (cfg.tipo === "semanal") return toISODate(addDays(d, (((cfg.dia - d.getDay()) % 7) + 7) % 7));
-  const esteMes = entregaDelMes(d, cfg.dia);
-  return toISODate(esteMes >= d ? esteMes : entregaDelMes(addMonths(startOfMonth(d), 1), cfg.dia));
+  const dias = cfg.tipo === "quincenal" && cfg.dia2 != null ? [cfg.dia, cfg.dia2] : [cfg.dia];
+  const proximoMes = addMonths(startOfMonth(d), 1);
+  const candidatas = [...dias.map((dia) => entregaDelMes(d, dia)), ...dias.map((dia) => entregaDelMes(proximoMes, dia))];
+  return toISODate(candidatas.filter((c) => c >= d).sort((a, b) => a.getTime() - b.getTime())[0]);
 }
 
-/** The delivery after `entregaISO`: next month's or next week's. */
+/** The delivery after `entregaISO`: next month's, the other half of the month's, or next week's. */
 export function entregaSiguiente(cfg: ConfigCiclo, entregaISO: string): string {
   const d = fromISODate(entregaISO);
   if (cfg.tipo === "semanal") return entregaDesde(cfg, addDays(d, 4));
+  if (cfg.tipo === "quincenal") return entregaDesde(cfg, addDays(d, 1));
   return toISODate(entregaDelMes(addMonths(startOfMonth(d), 1), cfg.dia));
 }
 
@@ -89,7 +105,8 @@ export function grabacionDeLaPieza(pieza: Pieza, client: Client, grabaciones: Gr
 
 export function grabacionDelCiclo(entregaISO: string, client: Client, grabaciones: Grabacion[]): Grabacion | undefined {
   const entrega = fromISODate(entregaISO);
-  const desde = toISODate(tipoCicloDe(client) === "semanal" ? addDays(entrega, -7) : subMonths(entrega, 1));
+  const tipo = tipoCicloDe(client);
+  const desde = toISODate(tipo === "semanal" ? addDays(entrega, -7) : tipo === "quincenal" ? addDays(entrega, -15) : subMonths(entrega, 1));
   const delCiclo = grabaciones
     .filter((g) => g.clienteId === client.id && g.fecha > desde && g.fecha <= entregaISO)
     .sort((a, b) => a.fecha.localeCompare(b.fecha));

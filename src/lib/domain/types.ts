@@ -10,6 +10,7 @@ export type Servicio = "contenido" | "ads" | "ambos";
 
 export type CicloTipo =
   | "mensual"
+  | "quincenal"
   | "semanal"
   | "diario"
   | "solo-ads"
@@ -37,10 +38,12 @@ export interface VolumenMensual {
 }
 
 export interface FlujoConfig {
-  /** Only "mensual" and "semanal" drive the delivery cycle; anything else reads as monthly. */
+  /** Only "mensual", "quincenal" and "semanal" drive the delivery cycle; anything else reads as monthly. */
   cicloTipo: CicloTipo;
-  /** Delivery day: day of the month (1-31) for monthly clients, weekday (0 = Sunday .. 6) for weekly ones. */
+  /** Delivery day: day of the month (1-31) for monthly and twice-a-month clients, weekday (0 = Sunday .. 6) for weekly ones. */
   diaEntrega?: number;
+  /** Second delivery day of the month, only for twice-a-month ("quincenal") clients. */
+  diaEntrega2?: number;
   /** Days before each delivery production starts. Defaults per cycle type (see ciclos.ts). */
   diasAnticipacion?: number;
   mandaCalendario: boolean;
@@ -70,6 +73,12 @@ export const DEFAULT_MARGEN_DIAS = 1;
 
 export function grabaDe(client: Client): boolean {
   return client.flujo.tieneGrabacion;
+}
+
+/** Only reels are shot: historias and posteos are made without recording, so
+ * they never wait for one. */
+export function esperaGrabacionLaPieza(client: Client, tipo: PieceType): boolean {
+  return grabaDe(client) && tipo === "reel";
 }
 
 export function margenDe(client: Client): number {
@@ -318,8 +327,8 @@ export type AdsEstado = "ok" | "revisar";
 
 export type AdsEstadoCuenta = "activa" | "pausada" | "frenada-pago";
 
-/** Alert when the creatives haven't been refreshed in this many days. */
-export const DIAS_REFRESH_CREATIVOS = 28;
+/** Ads are swapped for new ones every this many days. */
+export const CADENCIA_RECAMBIO_DIAS = 15;
 
 export interface AdsChequeo {
   id: string;
@@ -336,6 +345,60 @@ export interface AdsReporte {
   clienteId: string;
   periodo: string; // yyyy-MM covered
   estado: AdsReporteEstado;
+  /** How the month went. */
+  analisis?: string;
+  /** The new structure or strategy for the coming month. */
+  estrategia?: string;
+  /** Day it was sent. */
+  enviadoEn?: string;
+}
+
+/** A routine done on an Ads account, kept as its history: the weekly review
+ * ("revision", ref = the ISO week) and the ads swap ("recambio", ref = the day). */
+export interface AdsRegistro {
+  id: string;
+  clienteId: string;
+  tipo: "revision" | "recambio";
+  ref: string;
+  fecha: string;
+}
+
+// ---------------------------------------------------------------------------
+// Where each delivery is in its flow. One row per cycle (id = the cycle id),
+// written only once Paula moves it; no row = production as usual.
+// ---------------------------------------------------------------------------
+
+export const PASOS_ENTREGA = [
+  "calendario-armado",
+  "calendario-enviado",
+  "calendario-aprobado",
+  "produccion",
+  "entregado",
+  "correccion",
+  "ajustes",
+  "programado",
+] as const;
+
+export type PasoEntrega = (typeof PASOS_ENTREGA)[number];
+
+/** Steps where the calendar isn't approved yet: the delivery's pieces wait. */
+export const PASOS_SIN_APROBAR: readonly PasoEntrega[] = ["calendario-armado", "calendario-enviado"];
+
+export interface EstadoEntrega {
+  /** Cycle id: "{clienteId}__{delivery as the cycle computed it}". */
+  id: string;
+  clienteId: string;
+  paso?: PasoEntrega;
+  /** Day the current step was set. */
+  pasoDesde?: string;
+  /** Day it was handed in: the client's correction time counts from here. */
+  entregadoEn?: string;
+  /** Canva or presentation link. */
+  link?: string;
+  /** Clients who send the material: the day it has to arrive… */
+  materialFecha?: string;
+  /** …and whether it did. */
+  materialLlego: boolean;
 }
 
 export interface Gasto {

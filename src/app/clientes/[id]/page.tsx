@@ -18,6 +18,7 @@ import {
 import { Paneles } from "@/components/ficha/paneles";
 import { usePlan } from "@/lib/supabase/use-plan";
 import { EntregaActual } from "@/components/ficha/entrega-actual";
+import { SeccionPasos } from "@/components/ficha/pasos-entrega";
 import { ESTADO_CLIENTE_LABEL, TIPO_CLIENTE_LABEL } from "@/lib/domain/labels";
 import { ClienteEstado, grabaDe } from "@/lib/domain/types";
 import { Cargando, EmptyState } from "@/components/empty-state";
@@ -181,6 +182,7 @@ export default function ClienteDetailPage() {
               contenido: hace ? (
                 <>
                   <EntregaActual cliente={cliente} entregas={entregas} />
+                  <SeccionPasos cliente={cliente} entregas={entregas} hoyISO={hoyISO} />
                   <SeccionPiezas piezas={piezas} entregas={entregas} />
                   {(grabaDe(cliente) || grabaciones.length > 0) && (
                     <SeccionGrabaciones cliente={cliente} grabaciones={grabaciones} piezas={piezas} />
@@ -195,7 +197,21 @@ export default function ClienteDetailPage() {
                 />
               ),
             },
-            { id: "ads", titulo: "Ads", contenido: <PanelAds cliente={cliente} chequeos={chequeos ?? []} hoyISO={hoyISO} /> },
+            {
+              id: "ads",
+              titulo: "Ads",
+              contenido: (
+                <PanelAds
+                  cliente={cliente}
+                  clients={ctx.clients}
+                  chequeos={chequeos ?? []}
+                  historial={ctx.adsHistorial}
+                  reportes={ctx.reportes}
+                  estructura={ctx.estructura}
+                  hoyISO={hoyISO}
+                />
+              ),
+            },
             {
               id: "plata",
               titulo: "Plata",

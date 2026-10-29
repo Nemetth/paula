@@ -5,10 +5,10 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { EstimacionCarga } from "@/components/estimacion-carga";
-import { DIAS_SEMANA } from "@/components/cliente-form";
+import { CamposEntrega, diasEntregaValidos } from "@/components/cliente-form";
 import { SEMAFORO_ENTREGA, SemaforoPunto, avanceTexto } from "@/components/entrega";
 import { Cargando } from "@/components/empty-state";
-import { DEFAULT_ANTICIPACION, TipoCiclo } from "@/lib/domain/ciclos";
+import { DEFAULT_ANTICIPACION, POR_CICLO, TipoCiclo } from "@/lib/domain/ciclos";
 import { fechaCorta } from "@/lib/domain/dates";
 import { simularProspecto } from "@/lib/domain/simulador";
 import { Client, DEFAULT_MARGEN_DIAS, VolumenMensual } from "@/lib/domain/types";
@@ -21,6 +21,7 @@ export default function SimuladorPage() {
   const [volumen, setVolumen] = useState<VolumenMensual>({ historias: 0, posteos: 0, reels: 0 });
   const [ciclo, setCiclo] = useState<TipoCiclo>("mensual");
   const [dia, setDia] = useState<number | undefined>(undefined);
+  const [dia2, setDia2] = useState<number | undefined>(undefined);
   const [anticipacion, setAnticipacion] = useState<number | undefined>(undefined);
   const [margen, setMargen] = useState(DEFAULT_MARGEN_DIAS);
 
@@ -33,17 +34,26 @@ export default function SimuladorPage() {
       intocable: false,
       servicio: "contenido",
       volumenMensual: volumen,
-      flujo: { ...DEFAULT_FLUJO, cicloTipo: ciclo, diaEntrega: dia, diasAnticipacion: anticipacion, margenDias: margen, mandaCalendario: false },
+      flujo: {
+        ...DEFAULT_FLUJO,
+        cicloTipo: ciclo,
+        diaEntrega: dia,
+        diaEntrega2: dia2,
+        diasAnticipacion: anticipacion,
+        margenDias: margen,
+        mandaCalendario: false,
+      },
       activo: true,
       creadoEn: new Date().toISOString(),
       adsEstadoCuenta: "activa",
     }),
-    [volumen, ciclo, dia, anticipacion, margen],
+    [volumen, ciclo, dia, dia2, anticipacion, margen],
   );
   const total = volumen.historias + volumen.posteos + volumen.reels;
+  const conDia = diasEntregaValidos(ciclo, dia, dia2);
   const sim = useMemo(
-    () => (ctx && total > 0 && dia !== undefined ? simularProspecto(ctx.entrada, ctx.plan, prospecto) : undefined),
-    [ctx, prospecto, total, dia],
+    () => (ctx && total > 0 && conDia ? simularProspecto(ctx.entrada, ctx.plan, prospecto) : undefined),
+    [ctx, prospecto, total, conDia],
   );
   const nombre = (id: string) => ctx?.clients.find((c) => c.id === id)?.nombre ?? "";
 
@@ -67,42 +77,19 @@ export default function SimuladorPage() {
         <section className="mb-5">
           <h2 className="mb-3 text-[0.9375rem] font-semibold">Ciclo</h2>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Entrega">
-              <select
-                value={ciclo}
-                onChange={(e) => {
-                  setCiclo(e.target.value as TipoCiclo);
-                  setDia(undefined);
-                  setAnticipacion(undefined);
-                }}
-                className="input"
-              >
-                <option value="mensual">Una vez por mes</option>
-                <option value="semanal">Una vez por semana</option>
-              </select>
-            </Field>
-            <Field label={ciclo === "semanal" ? "Qué día" : "Qué día del mes"}>
-              {ciclo === "semanal" ? (
-                <select value={dia ?? ""} onChange={(e) => setDia(e.target.value === "" ? undefined : Number(e.target.value))} className="input">
-                  <option value="">Elegí</option>
-                  {DIAS_SEMANA.map(([n, d]) => (
-                    <option key={n} value={n}>
-                      {d}
-                    </option>
-                  ))}
-                </select>
-              ) : (
-                <input
-                  type="number"
-                  min={1}
-                  max={31}
-                  value={dia ?? ""}
-                  placeholder="15"
-                  onChange={(e) => setDia(e.target.value === "" ? undefined : Math.min(Math.max(Number(e.target.value), 1), 31))}
-                  className="input"
-                />
-              )}
-            </Field>
+            <CamposEntrega
+              tipo={ciclo}
+              dia={dia}
+              dia2={dia2}
+              onTipo={(t) => {
+                setCiclo(t);
+                setDia(undefined);
+                setDia2(undefined);
+                setAnticipacion(undefined);
+              }}
+              onDia={setDia}
+              onDia2={setDia2}
+            />
             <Field label="Arranca días antes">
               <input
                 type="number"
@@ -120,7 +107,7 @@ export default function SimuladorPage() {
         </section>
 
         <section className="mb-6">
-          <h2 className="mb-3 text-[0.9375rem] font-semibold">Volumen {ciclo === "semanal" ? "por semana" : "por mes"}</h2>
+          <h2 className="mb-3 text-[0.9375rem] font-semibold">Volumen {POR_CICLO[ciclo]}</h2>
           <div className="grid grid-cols-3 gap-3">
             {(
               [
@@ -142,13 +129,13 @@ export default function SimuladorPage() {
           </div>
         </section>
 
-        <EstimacionCarga volumen={volumen} semanal={ciclo === "semanal"} />
+        <EstimacionCarga volumen={volumen} ciclo={ciclo} />
 
         <section className="mt-6" aria-live="polite">
           <h2 className="titulo mb-2 text-[1.125rem]">Con tu plan real</h2>
           {!ctx ? (
             <Cargando />
-          ) : total === 0 || dia === undefined ? (
+          ) : total === 0 || !conDia ? (
             <p className="text-[0.9375rem] text-texto-secundario">Completá el día de entrega y el volumen para ver cómo queda.</p>
           ) : !sim ? (
             <p className="text-[0.9375rem] text-texto-secundario">No se pudo calcular con esos datos.</p>

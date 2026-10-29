@@ -115,7 +115,9 @@ export function AvisoManana() {
           Este navegador no recibe notificaciones. En el celular, instalá la app primero (abajo te explica cómo).
         </p>
       ) : estado === "sin-clave" ? (
-        <p className="text-[0.9375rem] text-texto-secundario">Falta configurar las claves del aviso en el servidor.</p>
+        <p className="text-[0.9375rem] text-texto-secundario">
+          El aviso todavía no está habilitado en la app. Cuando lo esté, acá aparece el botón para activarlo.
+        </p>
       ) : estado === "bloqueado" ? (
         <p className="text-[0.9375rem] text-texto-secundario">
           Las notificaciones están bloqueadas para esta app. Habilitalas en los ajustes del navegador y volvé.

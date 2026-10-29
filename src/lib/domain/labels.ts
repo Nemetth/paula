@@ -1,4 +1,15 @@
-import { AdsEstadoCuenta, ClienteEstado, ClienteTipo, PieceType } from "./types";
+import { AdsEstadoCuenta, ClienteEstado, ClienteTipo, PasoEntrega, PieceType } from "./types";
+
+export const PASO_ENTREGA_LABEL: Record<PasoEntrega, string> = {
+  "calendario-armado": "Calendario armado",
+  "calendario-enviado": "Calendario enviado",
+  "calendario-aprobado": "Calendario aprobado",
+  produccion: "Producción",
+  entregado: "Entregado",
+  correccion: "En corrección",
+  ajustes: "Ajustes",
+  programado: "Programado",
+};
 
 export const ESTADO_CUENTA_ADS_LABEL: Record<AdsEstadoCuenta, string> = {
   activa: "Activa",
@@ -15,7 +26,7 @@ export const ESTADO_CLIENTE_LABEL: Record<ClienteEstado, string> = {
 };
 
 export const TIPO_CLIENTE_LABEL: Record<ClienteTipo, string> = {
-  mensual: "Mensual",
+  mensual: "Con calendario",
   pack: "Pack o proyecto puntual",
   "material-cliente": "Me manda el material",
   "pedidos-diarios": "Pedidos diarios sin plan",

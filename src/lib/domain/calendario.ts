@@ -66,14 +66,25 @@ export interface CierreMes {
   periodo: string; // yyyy-MM
   entregadas: number;
   pendientes: number;
-  /** Planned load and capacity, in pieces. */
-  cargaPlanificada: number;
-  capacidad: number;
+  /** Pieces the plan puts in the month, from today on. */
+  piezasPlanificadas: number;
+  /** Days loaded over the cap. */
+  diasCargados: number;
   diasLibres: number;
 }
 
-/** Month close: what was delivered, what's left, planned load vs capacity, and
- * free days. Planned load and free days only cover days from today on (the plan
+/** Pieces (not routines or tasks) the plan puts on a day. */
+export const piezasDelDia = (tareas: Asignacion[]) => tareas.filter((a) => a.unidad.tipo === "edicion").length;
+
+/** "4 piezas", "4 piezas · día cargado", "Sin piezas": a day's load in Paula's words, no caps or decimals. */
+export function textoCarga(info: { tareas: Asignacion[]; carga?: CargaDia }): string {
+  const n = piezasDelDia(info.tareas);
+  const piezas = n === 0 ? "Sin piezas" : `${n} ${n === 1 ? "pieza" : "piezas"}`;
+  return info.carga?.semaforo === "sobrecargado" ? `${piezas} · día cargado` : piezas;
+}
+
+/** Month close: what was delivered, what's left, pieces planned, loaded and
+ * free days. Planned pieces and days only cover days from today on (the plan
  * has no memory of past days). */
 export function cierreDelMes(
   ancla: Date,
@@ -84,21 +95,19 @@ export function cierreDelMes(
   const delMes = piezas.filter((p) => (p.periodoPublicacion ?? p.fechaEntrega?.slice(0, 7)) === periodo);
   const entregadas = delMes.filter((p) => p.hecha).length;
 
-  let carga = 0;
-  let capacidad = 0;
+  let cargados = 0;
   let libres = 0;
   for (const c of Object.values(plan.cargaPorDia)) {
     if (!c.fecha.startsWith(periodo)) continue;
-    carga += c.carga;
-    capacidad += c.capacidad;
+    if (c.semaforo === "sobrecargado") cargados += 1;
     if (c.capacidad > 0 && c.carga === 0) libres += 1;
   }
   return {
     periodo,
     entregadas,
     pendientes: delMes.length - entregadas,
-    cargaPlanificada: Math.round(carga * 10) / 10,
-    capacidad: Math.round(capacidad * 10) / 10,
+    piezasPlanificadas: piezasDelDia(plan.asignaciones.filter((a) => a.fecha.startsWith(periodo))),
+    diasCargados: cargados,
     diasLibres: libres,
   };
 }

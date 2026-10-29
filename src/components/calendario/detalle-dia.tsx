@@ -3,11 +3,10 @@
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { Star, Wallet } from "lucide-react";
-import { DiaCalendario, colorCliente } from "@/lib/domain/calendario";
+import { DiaCalendario, colorCliente, textoCarga } from "@/lib/domain/calendario";
 import { fromISODate } from "@/lib/domain/dates";
 import { FechaEspecial } from "@/lib/domain/fechas-especiales";
 import { agruparPorCliente } from "@/lib/domain/hoy";
-import { fmtPiezas } from "@/lib/domain/planner";
 import { Client } from "@/lib/domain/types";
 import { IconoHito } from "@/components/entrega";
 
@@ -35,9 +34,7 @@ export function DetalleDia({
           {format(fromISODate(info.fecha), "EEEE d 'de' MMMM", { locale: es })}
         </h2>
         {info.carga && info.carga.capacidad > 0 && (
-          <p className="text-[0.8125rem] text-texto-secundario">
-            {fmtPiezas(info.carga.carga)} de {fmtPiezas(info.carga.capacidad)} piezas
-          </p>
+          <p className="text-[0.8125rem] text-texto-secundario">{textoCarga(info)}</p>
         )}
       </header>
 

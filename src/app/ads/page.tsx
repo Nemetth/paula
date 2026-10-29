@@ -1,30 +1,37 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { format, parse } from "date-fns";
+import { differenceInCalendarDays, format, parse } from "date-fns";
 import { es } from "date-fns/locale";
 import Link from "next/link";
-import { Check, CircleAlert, ExternalLink } from "lucide-react";
+import { Check, ChevronDown, CircleAlert, ExternalLink } from "lucide-react";
 import {
   actualizarCliente,
   guardarChequeoAds,
   guardarReporteAds,
+  guardarTextoReporte,
+  registrarAds,
   useAdsChequeos,
-  useAdsReportes,
-  useClients,
 } from "@/lib/supabase/data";
+import { usePlan } from "@/lib/supabase/use-plan";
 import {
-  CADENCIA_REVISION_FONDO_DIAS,
-  clientesAds,
-  diasDesdeRevision,
+  FilaReporte,
   TonoCuenta,
+  clientesAds,
+  cuentasConRutina,
+  diasDeRevision,
+  enLaSemana,
   hoyEnVentanaDeReportes,
+  nombreDia,
+  proximoRecambio,
   reportesDelMes,
   saludCuenta,
+  semanaDe,
 } from "@/lib/domain/ads";
-import { fechaCorta, toISODate } from "@/lib/domain/dates";
+import { completarUnidad } from "@/lib/domain/completar";
+import { fechaCorta, fromISODate, toISODate } from "@/lib/domain/dates";
 import { ESTADO_CUENTA_ADS_LABEL } from "@/lib/domain/labels";
-import { AdsEstado } from "@/lib/domain/types";
+import { AdsEstado, CADENCIA_RECAMBIO_DIAS, Client } from "@/lib/domain/types";
 import { Cargando, EmptyState } from "@/components/empty-state";
 import { Encabezado } from "@/components/encabezado";
 import { cn, indice } from "@/lib/utils";
@@ -36,29 +43,50 @@ const TONO_CUENTA: Record<TonoCuenta, string> = {
   gris: "bg-borde",
 };
 
+const boton = "tocable shrink-0 rounded-[8px] border border-borde px-3 py-2 text-[0.8125rem] font-medium hover:bg-borde/40";
+
 export default function AdsPage() {
   const today = useMemo(() => new Date(), []);
   const hoyISO = toISODate(today);
-  const clients = useClients();
+  const ctx = usePlan();
   const chequeos = useAdsChequeos();
-  const reportes = useAdsReportes();
   const [error, setError] = useState<string | null>(null);
 
-  if (!clients) return <Cargando />;
+  if (!ctx) return <Cargando />;
+  const { clients, reportes, adsHistorial, estructura, plan } = ctx;
 
   const cuentas = clientesAds(clients);
+  const conRutina = cuentasConRutina(clients);
   const chequeoHoy = new Map((chequeos ?? []).filter((c) => c.fecha === hoyISO).map((c) => [c.clienteId, c]));
-  const rotacion = [...cuentas].sort((a, b) => diasDesdeRevision(b, today) - diasDesdeRevision(a, today));
-  const filasReporte = reportesDelMes(clients, reportes ?? [], today);
+  const semana = semanaDe(today);
+  const diaRevision = diasDeRevision(clients, estructura);
+  const revisiones = conRutina
+    .map((c) => {
+      const dia = enLaSemana(today, diaRevision.get(c.id) ?? 1);
+      const hecha = adsHistorial.find((r) => r.tipo === "revision" && r.clienteId === c.id && r.ref === semana);
+      return { cliente: c, dia, hecha };
+    })
+    .sort((a, b) => a.dia.localeCompare(b.dia) || a.cliente.nombre.localeCompare(b.cliente.nombre));
+  const recambios = conRutina
+    .map((c) => ({ cliente: c, toca: proximoRecambio(c, clients, today) }))
+    .sort((a, b) => a.toca.localeCompare(b.toca));
+  const filasReporte = reportesDelMes(clients, reportes, today, estructura);
   const periodoReporte = filasReporte[0]?.periodo;
+  const contexto = { clients, historial: adsHistorial, estructura };
 
-  async function guardar(accion: () => Promise<void>) {
+  async function guardar(accion: () => Promise<unknown>) {
     setError(null);
     try {
       await accion();
     } catch (e) {
       setError(e instanceof Error ? e.message : "No se pudo guardar. Probá de nuevo.");
     }
+  }
+
+  /** Tick a routine the same way Hoy does when it is in the plan, so Hoy shows it done too. */
+  function hacer(prefijo: string, cliente: Client, directo: () => Promise<unknown>) {
+    const unidad = plan.asignaciones.find((a) => a.unidad.id.startsWith(`${prefijo}:${cliente.id}:`) && a.fecha <= hoyISO)?.unidad;
+    return guardar(() => (unidad ? completarUnidad(unidad, { clients }) : directo()));
   }
 
   return (
@@ -75,7 +103,7 @@ export default function AdsPage() {
       ) : (
         <div className="flex flex-col gap-9">
           <section className="entra" style={indice(1)}>
-            <h2 className="mb-1 text-[0.9375rem] font-semibold">Chequeo de hoy</h2>
+            <h2 className="mb-1 text-[0.9375rem] font-semibold">Todos los días: chequeo rápido</h2>
             <p className="mb-2 text-[0.8125rem] text-texto-secundario">
               Dejá una nota corta de lo que viste: queda en el historial de cada cliente.
             </p>
@@ -86,7 +114,7 @@ export default function AdsPage() {
                 const ultimaNota = (chequeos ?? [])
                   .filter((x) => x.clienteId === c.id && x.fecha < hoyISO && x.nota)
                   .sort((a, b) => b.fecha.localeCompare(a.fecha))[0];
-                const salud = saludCuenta(c, chequeos ?? [], today);
+                const salud = saludCuenta(c, chequeos ?? [], today, contexto);
                 return (
                   <li key={c.id} className="flex flex-col gap-2 px-2 py-3">
                     <div className="flex items-center gap-3">
@@ -149,71 +177,189 @@ export default function AdsPage() {
             </ul>
           </section>
 
-          <section className="entra" style={indice(2)}>
-            <h2 className="mb-1 text-[0.9375rem] font-semibold">Revisión a fondo</h2>
-            <p className="mb-2 text-[0.8125rem] text-texto-secundario">
-              Cada cuenta se revisa a fondo cada {CADENCIA_REVISION_FONDO_DIAS} días. Va rotando: la más atrasada
-              aparece en Hoy y es lo primero que se posterga si no entra.
-            </p>
-            <ul className="papel flex flex-col divide-y divide-borde/80 px-1.5">
-              {rotacion.map((c) => {
-                const dias = diasDesdeRevision(c, today);
-                const vencida = dias >= CADENCIA_REVISION_FONDO_DIAS;
-                return (
-                  <li key={c.id} className="flex items-center gap-3 px-2 py-3">
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate font-semibold">{c.nombre}</p>
-                      <p className={cn("text-[0.8125rem]", vencida ? "text-acento-texto" : "text-texto-secundario")}>
-                        {dias === Infinity ? "Nunca revisada" : dias === 0 ? "Revisada hoy" : `Hace ${dias} d`}
-                      </p>
-                    </div>
-                    <button
-                      onClick={() => guardar(() => actualizarCliente(c.id, { adsUltimaRevision: hoyISO }))}
-                      className="tocable shrink-0 rounded-[8px] border border-borde px-3 py-2 text-[0.8125rem] font-medium hover:bg-borde/40"
-                    >
-                      Revisada hoy
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          </section>
+          {conRutina.length > 0 && (
+            <>
+              <section className="entra" style={indice(2)}>
+                <h2 className="mb-1 text-[0.9375rem] font-semibold">Una vez por semana: revisión de anuncios</h2>
+                <p className="mb-2 text-[0.8125rem] text-texto-secundario">
+                  Cada cuenta tiene su día, repartidas en la semana. Aparece sola en Hoy y en el Calendario.
+                </p>
+                <ul className="papel flex flex-col divide-y divide-borde/80 px-1.5">
+                  {revisiones.map(({ cliente: c, dia, hecha }) => {
+                    const atrasada = !hecha && dia < hoyISO;
+                    return (
+                      <li key={c.id} className="flex items-center gap-3 px-2 py-3">
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate font-semibold">{c.nombre}</p>
+                          <p className={cn("text-[0.8125rem]", atrasada ? "font-medium text-acento-texto" : "text-texto-secundario")}>
+                            {hecha
+                              ? `Revisada el ${fechaCorta(hecha.fecha)}`
+                              : dia === hoyISO
+                                ? "Le toca hoy"
+                                : atrasada
+                                  ? `Le tocaba el ${nombreDia(fromISODate(dia).getDay())}`
+                                  : `Le toca el ${nombreDia(fromISODate(dia).getDay())}`}
+                          </p>
+                        </div>
+                        {hecha ? (
+                          <span className="flex shrink-0 items-center gap-1 rounded-[8px] bg-verde/15 px-3 py-2 text-[0.8125rem] font-medium text-verde">
+                            <Check size={14} /> Hecha
+                          </span>
+                        ) : (
+                          <button
+                            onClick={() =>
+                              hacer("ads-revision", c, async () => {
+                                await registrarAds({ clienteId: c.id, tipo: "revision", ref: semana, fecha: hoyISO });
+                                await actualizarCliente(c.id, { adsUltimaRevision: hoyISO });
+                              })
+                            }
+                            className={boton}
+                          >
+                            Revisada hoy
+                          </button>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              </section>
 
-          <section className="entra" style={indice(3)}>
-            <h2 className="mb-1 text-[0.9375rem] font-semibold">
-              Reportes de {periodoReporte ? format(parse(periodoReporte, "yyyy-MM", new Date()), "MMMM", { locale: es }) : "el mes"}
-            </h2>
-            <p className="mb-2 text-[0.8125rem] text-texto-secundario">
-              {hoyEnVentanaDeReportes(today)
-                ? "Se mandan del 1 al 5: estás en plazo."
-                : "Se mandan del 1 al 5 de cada mes."}
-            </p>
-            <ul className="papel flex flex-col divide-y divide-borde/80 px-1.5">
-              {filasReporte.map((f) => (
-                <li key={f.cliente.id} className="flex items-center gap-3 px-2 py-3">
-                  <p className="min-w-0 flex-1 truncate font-semibold">{f.cliente.nombre}</p>
-                  <button
-                    onClick={() =>
-                      guardar(() =>
-                        guardarReporteAds(f.cliente.id, f.periodo, f.estado === "enviado" ? "pendiente" : "enviado"),
-                      )
+              <section className="entra" style={indice(3)}>
+                <h2 className="mb-1 text-[0.9375rem] font-semibold">Cada {CADENCIA_RECAMBIO_DIAS} días: recambio de anuncios</h2>
+                <p className="mb-2 text-[0.8125rem] text-texto-secundario">
+                  Se cuenta desde el último recambio. Cuando le toca a una cuenta, te avisa y aparece en Hoy.
+                </p>
+                <ul className="papel flex flex-col divide-y divide-borde/80 px-1.5">
+                  {recambios.map(({ cliente: c, toca }) => {
+                    const dias = differenceInCalendarDays(fromISODate(toca), today);
+                    return (
+                      <li key={c.id} className="flex items-center gap-3 px-2 py-3">
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate font-semibold">{c.nombre}</p>
+                          <p className={cn("text-[0.8125rem]", dias <= 0 ? "font-medium text-acento-texto" : "text-texto-secundario")}>
+                            {dias < 0
+                              ? `Le toca desde hace ${-dias} ${dias === -1 ? "día" : "días"}`
+                              : dias === 0
+                                ? "Le toca hoy"
+                                : `Le toca el ${fechaCorta(toca)}`}
+                            {c.adsRefreshCreativos ? ` · último el ${fechaCorta(c.adsRefreshCreativos)}` : " · sin recambio cargado"}
+                          </p>
+                        </div>
+                        <button
+                          onClick={() =>
+                            hacer("ads-recambio", c, async () => {
+                              await registrarAds({ clienteId: c.id, tipo: "recambio", ref: hoyISO, fecha: hoyISO });
+                              await actualizarCliente(c.id, { adsRefreshCreativos: hoyISO });
+                            })
+                          }
+                          className={boton}
+                        >
+                          Renové hoy
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </section>
+            </>
+          )}
+
+          {filasReporte.length > 0 && (
+            <section className="entra" style={indice(4)}>
+              <h2 className="mb-1 text-[0.9375rem] font-semibold">
+                A principio de mes: reportes de{" "}
+                {periodoReporte ? format(parse(periodoReporte, "yyyy-MM", new Date()), "MMMM", { locale: es }) : "el mes"}
+              </h2>
+              <p className="mb-2 text-[0.8125rem] text-texto-secundario">
+                {hoyEnVentanaDeReportes(today)
+                  ? "Repartidos del 1 al 5, cada cliente en su día: estás en plazo."
+                  : "Se reparten del 1 al 5 de cada mes, cada cliente en su día."}{" "}
+                Abrí cada uno para escribir el análisis y la nueva estrategia.
+              </p>
+              <ul className="papel flex flex-col divide-y divide-borde/80 px-1.5">
+                {filasReporte.map((f) => (
+                  <FilaDeReporte
+                    key={f.cliente.id}
+                    fila={f}
+                    onEnviado={() =>
+                      f.estado === "enviado"
+                        ? guardar(() => guardarReporteAds(f.cliente.id, f.periodo, "pendiente"))
+                        : hacer("ads-reporte", f.cliente, () => guardarReporteAds(f.cliente.id, f.periodo, "enviado"))
                     }
-                    className={cn(
-                      "tocable shrink-0 rounded-[8px] px-3 py-2 text-[0.8125rem] font-medium",
-                      f.estado === "enviado" && "bg-verde/15 text-verde",
-                      f.estado === "pendiente" && !f.atrasado && "bg-ambar/15 text-ambar",
-                      f.atrasado && "bg-acento/15 text-acento-texto",
-                    )}
-                  >
-                    {f.estado === "enviado" ? "Enviado" : f.atrasado ? "Atrasado" : "Pendiente"}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </section>
+                    onTexto={(cambios) => guardar(() => guardarTextoReporte(f.cliente.id, f.periodo, cambios))}
+                  />
+                ))}
+              </ul>
+            </section>
+          )}
         </div>
       )}
     </div>
+  );
+}
+
+/** One client's report: its day, sent or not, and the month's analysis and new strategy. */
+function FilaDeReporte({
+  fila: f,
+  onEnviado,
+  onTexto,
+}: {
+  fila: FilaReporte;
+  onEnviado: () => void;
+  onTexto: (cambios: { analisis?: string; estrategia?: string }) => void;
+}) {
+  const [abierta, setAbierta] = useState(false);
+  const texto = (campo: "analisis" | "estrategia", etiqueta: string, placeholder: string) => (
+    <label className="flex flex-col gap-1">
+      <span className="text-[0.8125rem] font-medium text-texto-secundario">{etiqueta}</span>
+      <textarea
+        key={f.reporte?.[campo] ?? ""}
+        defaultValue={f.reporte?.[campo] ?? ""}
+        rows={3}
+        placeholder={placeholder}
+        onBlur={(e) => {
+          if (e.target.value.trim() !== (f.reporte?.[campo] ?? "")) onTexto({ [campo]: e.target.value });
+        }}
+        className="input resize-y text-[0.9375rem]"
+      />
+    </label>
+  );
+  return (
+    <li className="px-2 py-3">
+      <div className="flex items-center gap-3">
+        <button onClick={() => setAbierta((a) => !a)} aria-expanded={abierta} className="tocable flex min-w-0 flex-1 items-center gap-2 text-left">
+          <span className="min-w-0 flex-1">
+            <span className="block truncate font-semibold">{f.cliente.nombre}</span>
+            <span className="block text-[0.8125rem] text-texto-secundario">
+              {f.estado === "enviado"
+                ? `Enviado${f.reporte?.enviadoEn ? ` el ${fechaCorta(f.reporte.enviadoEn)}` : ""}`
+                : f.dia
+                  ? `Para el ${fechaCorta(f.dia)}`
+                  : "Del 1 al 5"}
+              {(f.reporte?.analisis || f.reporte?.estrategia) && " · con análisis"}
+            </span>
+          </span>
+          <ChevronDown size={16} className={cn("shrink-0 text-texto-secundario transition-transform duration-300", abierta && "rotate-180")} />
+        </button>
+        <button
+          onClick={onEnviado}
+          className={cn(
+            "tocable shrink-0 rounded-[8px] px-3 py-2 text-[0.8125rem] font-medium",
+            f.estado === "enviado" && "bg-verde/15 text-verde",
+            f.estado === "pendiente" && !f.atrasado && "bg-ambar/15 text-ambar",
+            f.atrasado && "bg-acento/15 text-acento-texto",
+          )}
+        >
+          {f.estado === "enviado" ? "Enviado" : f.atrasado ? "Atrasado" : "Pendiente"}
+        </button>
+      </div>
+      {abierta && (
+        <div className="aparece mt-3 flex flex-col gap-3">
+          {texto("analisis", "Análisis del mes", "Qué funcionó, qué no, resultados…")}
+          {texto("estrategia", "Nueva estructura o estrategia", "Qué cambia el mes que viene…")}
+        </div>
+      )}
+    </li>
   );
 }
 

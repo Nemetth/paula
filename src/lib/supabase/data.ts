@@ -13,6 +13,7 @@ import { supabase } from "./client";
 import {
   AdsChequeo,
   AdsEstado,
+  AdsRegistro,
   AdsReporte,
   AdsEstadoCuenta,
   AdsReporteEstado,
@@ -24,6 +25,7 @@ import {
   CobroEstado,
   DEFAULT_ESTRUCTURA_SEMANAL,
   DiaBloqueado,
+  EstadoEntrega,
   EstructuraSemanal,
   FlujoConfig,
   FlowStage,
@@ -40,7 +42,22 @@ import {
 
 // ---------- row <-> domain mapping ----------
 
-import { ClientRow, GrabacionRow, PiezaRow, BlockedRow, rowToBlocked, rowToClient, rowToGrabacion, rowToPieza } from "./filas";
+import {
+  AdsRegistroRow,
+  BlockedRow,
+  ClientRow,
+  EstadoEntregaRow,
+  GrabacionRow,
+  PiezaRow,
+  ReporteRow,
+  rowToAdsRegistro,
+  rowToBlocked,
+  rowToClient,
+  rowToEstadoEntrega,
+  rowToGrabacion,
+  rowToPieza,
+  rowToReporte,
+} from "./filas";
 
 
 type WorkLogRow = {
@@ -89,7 +106,6 @@ function rowToCobro(r: CobroRow): Cobro {
 type CicloRow = { id: string; cliente_id: string; entrega: string };
 type IdeaRow = { id: string; cliente_id: string; texto: string; usada: boolean; creada_en: string };
 type ChequeoRow = { id: string; cliente_id: string; fecha: string; estado: AdsEstado; nota: string | null };
-type ReporteRow = { id: string; cliente_id: string; periodo: string; estado: AdsReporteEstado };
 type TareaRow = {
   id: string;
   titulo: string;
@@ -251,12 +267,17 @@ export function useAdsChequeos(): AdsChequeo[] | undefined {
 }
 
 export function useAdsReportes(): AdsReporte[] | undefined {
-  return useTable<ReporteRow, AdsReporte>("ads_reportes", (r) => ({
-    id: r.id,
-    clienteId: r.cliente_id,
-    periodo: r.periodo,
-    estado: r.estado,
-  }));
+  return useTable<ReporteRow, AdsReporte>("ads_reportes", rowToReporte);
+}
+
+/** Weekly reviews and ads swaps done, per account: the Ads routines' history. */
+export function useAdsHistorial(): AdsRegistro[] | undefined {
+  return useTable<AdsRegistroRow, AdsRegistro>("ads_historial", rowToAdsRegistro);
+}
+
+/** Where each delivery is in its flow (only the ones Paula moved). */
+export function useEstadosEntrega(): EstadoEntrega[] | undefined {
+  return useTable<EstadoEntregaRow, EstadoEntrega>("entregas_estado", rowToEstadoEntrega);
 }
 
 export function useTareas(): Tarea[] | undefined {
@@ -547,6 +568,12 @@ export async function restaurarRevisionAds(id: string, fecha: string | null): Pr
   if (error) throw error;
 }
 
+/** Put an account's last ads swap back to `fecha` (null = none): the undo of a tick. */
+export async function restaurarRecambioAds(id: string, fecha: string | null): Promise<void> {
+  const { error } = await supabase().from("clients").update({ ads_refresh_creativos: fecha }).eq("id", id);
+  if (error) throw error;
+}
+
 export async function eliminarCliente(id: string): Promise<void> {
   const { error } = await supabase().from("clients").delete().eq("id", id);
   if (error) throw error;
@@ -738,7 +765,65 @@ export async function guardarReporteAds(
 ): Promise<void> {
   const { error } = await supabase()
     .from("ads_reportes")
-    .upsert({ id: `${periodo}__${clienteId}`, cliente_id: clienteId, periodo, estado });
+    .upsert({
+      id: `${periodo}__${clienteId}`,
+      cliente_id: clienteId,
+      periodo,
+      estado,
+      enviado_en: estado === "enviado" ? hoyLocal() : null,
+    });
+  if (error) throw error;
+}
+
+/** The report's text: how the month went and the new structure or strategy. */
+export async function guardarTextoReporte(
+  clienteId: string,
+  periodo: string,
+  cambios: { analisis?: string; estrategia?: string },
+): Promise<void> {
+  const row: Record<string, unknown> = { id: `${periodo}__${clienteId}`, cliente_id: clienteId, periodo };
+  if (cambios.analisis !== undefined) row.analisis = cambios.analisis.trim() || null;
+  if (cambios.estrategia !== undefined) row.estrategia = cambios.estrategia.trim() || null;
+  // A report not saved yet starts pending; one already saved keeps its state.
+  const { data: existe } = await supabase().from("ads_reportes").select("id").eq("id", row.id).maybeSingle();
+  if (!existe) row.estado = "pendiente";
+  const { error } = await supabase().from("ads_reportes").upsert(row);
+  if (error) throw error;
+}
+
+/** Log an Ads routine as done (the weekly review or an ads swap). */
+export async function registrarAds(r: Omit<AdsRegistro, "id">): Promise<string> {
+  const id = `${r.tipo}__${r.clienteId}__${r.ref}`;
+  const { error } = await supabase()
+    .from("ads_historial")
+    .upsert({ id, cliente_id: r.clienteId, tipo: r.tipo, ref: r.ref, fecha: r.fecha });
+  if (error) throw error;
+  return id;
+}
+
+export async function quitarRegistroAds(id: string): Promise<void> {
+  const { error } = await supabase().from("ads_historial").delete().eq("id", id);
+  if (error) throw error;
+}
+
+/** Move a delivery along its steps, or set its link or material. Moving to a
+ * step records the day; "entregado" also starts the client's correction time. */
+export async function guardarEstadoEntrega(
+  id: string,
+  clienteId: string,
+  cambios: Partial<Omit<EstadoEntrega, "id" | "clienteId">>,
+): Promise<void> {
+  const row: Record<string, unknown> = { id, cliente_id: clienteId };
+  // `paso: undefined` takes the delivery back to having no step (production as usual).
+  if ("paso" in cambios) {
+    row.paso = cambios.paso ?? null;
+    row.paso_desde = cambios.paso ? (cambios.pasoDesde ?? hoyLocal()) : null;
+  }
+  if ("entregadoEn" in cambios) row.entregado_en = cambios.entregadoEn ?? null;
+  if ("link" in cambios) row.link = cambios.link?.trim() || null;
+  if ("materialFecha" in cambios) row.material_fecha = cambios.materialFecha || null;
+  if (cambios.materialLlego !== undefined) row.material_llego = cambios.materialLlego;
+  const { error } = await supabase().from("entregas_estado").upsert(row);
   if (error) throw error;
 }
 

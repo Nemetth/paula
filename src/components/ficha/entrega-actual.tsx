@@ -65,7 +65,9 @@ export function EntregaActual({ cliente, entregas }: { cliente: Client; entregas
         </span>{" "}
         <span className="text-texto-secundario">
           listas · faltan {actual.faltan}
-          {actual.esperaGrabacion && " · esperan la grabación para entrar al plan"}
+          {actual.esperaAprobacion
+            ? " · esperan la aprobación del calendario"
+            : actual.esperaGrabacion && " · los reels esperan la grabación"}
         </span>
       </p>
       <AvancePorTipo porTipo={actual.porTipo} />

@@ -1,28 +1,29 @@
 "use client";
 
 import { useClients, useEstructuraSemanal } from "@/lib/supabase/data";
-import { esSemanal, fmtPiezas, simularCargaPiezas } from "@/lib/domain/planner";
+import { TipoCiclo, tipoCicloDe } from "@/lib/domain/ciclos";
+import { fmtPiezas, simularCargaPiezas } from "@/lib/domain/planner";
 import { DEFAULT_ESTRUCTURA_SEMANAL, VolumenMensual } from "@/lib/domain/types";
 
 /** Monthly load of a (new or prospective) client in pieces, on top of the rest
  * of the active portfolio, against Paula's daily cap × working days. */
 export function EstimacionCarga({
   volumen,
-  semanal = false,
+  ciclo = "mensual",
   excluirId,
 }: {
   volumen: VolumenMensual;
-  /** The volume is per week. */
-  semanal?: boolean;
+  /** What the volume is per: a month, half a month or a week. */
+  ciclo?: TipoCiclo;
   excluirId?: string;
 }) {
   const clients = useClients();
   const estructura = useEstructuraSemanal() ?? DEFAULT_ESTRUCTURA_SEMANAL;
 
-  const propia = simularCargaPiezas(volumen, estructura, semanal);
+  const propia = simularCargaPiezas(volumen, estructura, ciclo);
   const cartera = (clients ?? [])
     .filter((c) => c.id !== excluirId && c.activo && c.estado !== "en-pausa" && c.servicio !== "ads")
-    .reduce((s, c) => s + simularCargaPiezas(c.volumenMensual, estructura, esSemanal(c)).piezasMes, 0);
+    .reduce((s, c) => s + simularCargaPiezas(c.volumenMensual, estructura, tipoCicloDe(c)).piezasMes, 0);
   const total = cartera + propia.piezasMes;
   const libre = propia.capacidadMes - total;
 

@@ -51,8 +51,9 @@ export function simularProspecto(
   const piezas = [...entrada.piezas, ...nuevas];
   const plan = planificar({ ...entrada, clients, piezas });
 
-  const antes = calcularEntregas({ clients: entrada.clients, piezas: entrada.piezas, grabaciones: entrada.grabaciones, plan: base, today: entrada.today });
-  const despues = calcularEntregas({ clients, piezas, grabaciones: entrada.grabaciones, plan, today: entrada.today });
+  const comun = { grabaciones: entrada.grabaciones, today: entrada.today, estructura: entrada.estructura, estados: entrada.estadosEntrega };
+  const antes = calcularEntregas({ ...comun, clients: entrada.clients, piezas: entrada.piezas, plan: base });
+  const despues = calcularEntregas({ ...comun, clients, piezas, plan });
   const previo = new Map(antes.map((e) => [`${e.clienteId}|${e.fecha}`, e.semaforo]));
 
   return {

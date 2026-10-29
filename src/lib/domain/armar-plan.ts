@@ -2,11 +2,22 @@
 // and the server (the morning notification) both call this, so the push says
 // exactly what Hoy will show.
 
-import { PESO_REVISION_FONDO, unidadesAdsFondo } from "./ads";
+import { PESO_RECAMBIO, PESO_REPORTE, PESO_REVISION, unidadesAds } from "./ads";
 import { toISODate } from "./dates";
 import { PESO_CALENDARIO, PESO_GUION, PlannerInput, planificar } from "./planner";
 import { unidadesDeTareas } from "./tareas";
-import { Client, DiaBloqueado, EstructuraSemanal, Grabacion, Pieza, Tarea, pesosPieza } from "./types";
+import {
+  AdsRegistro,
+  AdsReporte,
+  Client,
+  DiaBloqueado,
+  EstadoEntrega,
+  EstructuraSemanal,
+  Grabacion,
+  Pieza,
+  Tarea,
+  pesosPieza,
+} from "./types";
 
 /** One line of the done log, as far as the plan cares. */
 export interface Hecho {
@@ -22,6 +33,11 @@ export interface DatosPlan {
   grabaciones: Grabacion[];
   blockedDates: DiaBloqueado[];
   tareas: Tarea[];
+  /** Ads routines done (weekly reviews, swaps) and the reports, so they aren't planned again. */
+  adsHistorial: AdsRegistro[];
+  reportes: AdsReporte[];
+  /** Where each delivery is in its flow. */
+  estadosEntrega: EstadoEntrega[];
   pospuestas: Record<string, string>;
   hechas: Hecho[];
   /** Today's "hoy puedo menos" cap, if Paula set one. */
@@ -40,7 +56,18 @@ export function entradaDelPlan(d: DatosPlan): PlannerInput {
     grabaciones: d.grabaciones,
     blockedDates: d.blockedDates,
     estructura: d.estructura,
-    extras: [...unidadesAdsFondo(d.clients, d.today), ...unidadesDeTareas(d.tareas, d.clients, d.today)],
+    estadosEntrega: d.estadosEntrega,
+    extras: [
+      ...unidadesAds({
+        clients: d.clients,
+        historial: d.adsHistorial,
+        reportes: d.reportes,
+        estructura: d.estructura,
+        today: d.today,
+        horizonteDias: d.horizonteDias,
+      }),
+      ...unidadesDeTareas(d.tareas, d.clients, d.today),
+    ],
     pospuestas: d.pospuestas,
     unidadesHechasHoy: hechasHoy.map((h) => h.unidadId),
     unidadesHechas: d.hechas.map((h) => h.unidadId),
@@ -65,7 +92,9 @@ function pesoHecho(hechas: Hecho[], piezas: Pieza[], estructura: EstructuraSeman
     }
     if (h.tipo === "guion") return suma + PESO_GUION;
     if (h.tipo === "ideas") return suma + PESO_CALENDARIO;
-    if (h.tipo === "ads-fondo") return suma + PESO_REVISION_FONDO;
+    if (h.tipo === "ads-revision") return suma + PESO_REVISION;
+    if (h.tipo === "ads-recambio") return suma + PESO_RECAMBIO;
+    if (h.tipo === "ads-reporte") return suma + PESO_REPORTE;
     return suma + 1;
   }, 0);
 }

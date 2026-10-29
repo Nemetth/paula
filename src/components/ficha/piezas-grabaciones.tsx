@@ -126,7 +126,7 @@ function BloqueEntrega({
           <span className="numeros block text-[0.8125rem] text-texto-secundario">
             {hechas} de {piezas.length} hechas
             {entrega && ` · ${SEMAFORO_ENTREGA[entrega.semaforo].label.toLowerCase()}`}
-            {entrega?.esperaGrabacion && " · esperan la grabación"}
+            {entrega?.esperaAprobacion ? " · esperan la aprobación" : entrega?.esperaGrabacion && " · reels esperan la grabación"}
           </span>
         </span>
         <ChevronDown size={18} className={cn("shrink-0 text-texto-secundario transition-transform duration-300", abierto && "rotate-180")} />
@@ -316,12 +316,12 @@ export function SeccionGrabaciones({ cliente, grabaciones, piezas }: { cliente: 
 
   const ordenadas = [...grabaciones].sort((a, b) => a.fecha.localeCompare(b.fecha));
   const pendientesDe = (g: Grabacion) =>
-    piezas.filter((p) => !p.hecha && grabacionDeLaPieza(p, cliente, grabaciones)?.id === g.id).length;
+    piezas.filter((p) => !p.hecha && p.tipo === "reel" && grabacionDeLaPieza(p, cliente, grabaciones)?.id === g.id).length;
 
   return (
     <Seccion
       titulo="Grabaciones"
-      detalle="Cada grabación bloquea el día entero más el viaje. Las piezas de la entrega entran al plan cuando la marcás como hecha."
+      detalle="Cada grabación bloquea el día entero más el viaje. Los reels de la entrega entran al plan cuando la marcás como hecha; historias y posteos no la esperan."
     >
       <form
         onSubmit={(e) => {
@@ -365,7 +365,7 @@ export function SeccionGrabaciones({ cliente, grabaciones, piezas }: { cliente: 
                 className={`${campo} py-1.5`}
               />
               <p className="min-w-0 flex-1 basis-32 text-[0.8125rem] text-texto-secundario">
-                {g.hecha ? "Hecha" : `${pendientesDe(g)} piezas esperan`}
+                {g.hecha ? "Hecha" : `${pendientesDe(g)} ${pendientesDe(g) === 1 ? "reel espera" : "reels esperan"}`}
                 {g.viajeDiasAntes + g.viajeDiasDespues > 0 ? ` · viaje ${g.viajeDiasAntes}+${g.viajeDiasDespues} d` : ""}
               </p>
               <label className="flex items-center gap-2 text-[0.9375rem]">

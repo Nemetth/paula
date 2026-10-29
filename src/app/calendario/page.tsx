@@ -10,7 +10,6 @@ import { actualizarPieza } from "@/lib/supabase/data";
 import { usePlan } from "@/lib/supabase/use-plan";
 import { armarDias, cierreDelMes, colorCliente, diasDeLaSemana, grillaDelMes } from "@/lib/domain/calendario";
 import { fechasEspecialesDelMes } from "@/lib/domain/fechas-especiales";
-import { fmtPiezas } from "@/lib/domain/planner";
 import { fromISODate, toISODate } from "@/lib/domain/dates";
 import { SEMAFORO_ENTREGA, SemaforoPunto, avanceTexto, fechaDM } from "@/components/entrega";
 import { VistaMes } from "@/components/calendario/vista-mes";
@@ -209,16 +208,16 @@ export default function CalendarioPage() {
               <dt className="text-texto-secundario">Pendientes</dt>
               <dd className="text-right font-medium">{cierre.pendientes}</dd>
               <dt className="text-texto-secundario">Piezas planificadas</dt>
-              <dd className="text-right font-medium">
-                {fmtPiezas(cierre.cargaPlanificada)} de {fmtPiezas(cierre.capacidad)}
-              </dd>
+              <dd className="text-right font-medium">{cierre.piezasPlanificadas}</dd>
+              <dt className="text-texto-secundario">Días cargados</dt>
+              <dd className="text-right font-medium">{cierre.diasCargados}</dd>
               <dt className="text-texto-secundario">Días libres de carga</dt>
               <dd className="text-right font-medium">{cierre.diasLibres}</dd>
             </dl>
             <p className="mt-3 text-[0.8125rem] text-texto-secundario">
               {finMes
                 ? "El plan solo cubre desde hoy, así que un mes pasado no tiene carga planificada."
-                : "Planificado y días libres cuentan desde hoy, contra tu tope de piezas por día."}
+                : "Lo planificado y los días cuentan desde hoy."}
             </p>
           </section>
         </>
