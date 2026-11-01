@@ -5,15 +5,19 @@ import Link from "next/link";
 import { addDays, format } from "date-fns";
 import { es } from "date-fns/locale";
 import {
-  AlertTriangle,
   ArrowRight,
+  Bell,
+  CalendarDays,
   CheckCheck,
   ChevronDown,
+  Clapperboard,
   FileText,
   Flame,
+  Megaphone,
   Moon,
   PackageCheck,
   Presentation,
+  Repeat,
   Settings,
   Undo2,
   Video,
@@ -44,7 +48,8 @@ import { Client, diasDeTrabajo, topeDelDia } from "@/lib/domain/types";
 import { NOMBRE, bajadaDelDia, fraseDelAvance, saludo } from "@/lib/domain/voz";
 import { DisruptionSheet } from "@/components/disruption-sheet";
 import { Cargando, EmptyState } from "@/components/empty-state";
-import { Encabezado } from "@/components/encabezado";
+import { SemaforoPunto } from "@/components/entrega";
+import type { Entrega } from "@/lib/domain/entregas";
 import { Inki } from "@/components/inki";
 import { Sello } from "@/components/sello";
 import { FilaDeslizable } from "@/components/fila-deslizable";
@@ -55,6 +60,33 @@ import { Tilde } from "@/components/tilde";
 import { cn, indice } from "@/lib/utils";
 
 const fechaLarga = (iso: string) => format(fromISODate(iso), "EEE d MMM", { locale: es });
+
+/** One white card per row, on the grey of its column. */
+const TARJETA = "rounded-[16px] border border-borde/70 bg-bg-elevada shadow-[var(--shadow-papel)]";
+/** The red edge on what is late. */
+const URGENTE = "border-l-[3px] border-l-[var(--color-error)]";
+const AVISOS_VISIBLES = 3;
+const ENTREGAS_VISIBLES = 6;
+
+/** Today's list split the way Paula works it: content first, then Ads, then her fixed routines. */
+const GRUPOS_HOY = [
+  { clave: "contenido", titulo: "Contenido", Icono: Clapperboard },
+  { clave: "ads", titulo: "Ads", Icono: Megaphone },
+  { clave: "fijos", titulo: "Fijos", Icono: Repeat },
+] as const;
+
+function grupoDe(item: ItemHoy): (typeof GRUPOS_HOY)[number]["clave"] {
+  switch (item.tipo) {
+    case "fijo":
+      return "fijos";
+    case "ads":
+      return "ads";
+    case "unidad":
+      return item.asignacion.unidad.categoria === "ads" ? "ads" : "contenido";
+    case "registro":
+      return item.registro.tipo.startsWith("ads") ? "ads" : "contenido";
+  }
+}
 
 export default function HoyPage() {
   const today = useMemo(() => new Date(), []);
@@ -301,247 +333,279 @@ export default function HoyPage() {
     }
   };
 
+  const grupos = GRUPOS_HOY.map((g) => ({ ...g, items: hoy.items.filter((i) => grupoDe(i) === g.clave) })).filter(
+    (g) => g.items.length > 0,
+  );
+  const cuentaUrgente = hoy.atrasadas.length + correrEntrega.length + (vencidos > 0 ? 1 : 0) + (reportesAtrasados > 0 ? 1 : 0);
+  const entregasPendientes = ctx.entregas.filter((e) => e.semaforo !== "lista");
+
   return (
-    <div className="mx-auto max-w-[640px] px-4 pt-2 lg:max-w-[760px] lg:px-8 lg:pt-4">
+    <div className="mx-auto max-w-[640px] px-4 pt-2 lg:max-w-[760px] lg:px-8 lg:pt-4 xl:max-w-[1360px]">
       <Inki />
-      <Encabezado
-        grande
-        arriba={format(today, "EEEE d 'de' MMMM", { locale: es })}
-        titulo={saludo(today)}
-        nombre={NOMBRE}
-        bajada={bajada}
-        derecha={
+      <header className="mb-5 flex flex-col gap-4 xl:mb-6 xl:flex-row xl:items-center xl:justify-between xl:gap-8">
+        <div className="entra relative min-w-0 px-11 text-center xl:px-0 xl:text-left">
           <Link
             href="/ajustes"
             aria-label="Ajustes"
-            className="tocable rounded-full p-2 text-texto-secundario hover:bg-borde/50 lg:hidden"
+            className="tocable absolute right-0 top-0 rounded-full p-2 text-texto-secundario hover:bg-borde/50 lg:hidden"
           >
             <Settings size={20} strokeWidth={1.75} />
           </Link>
-        }
-      />
+          <p className="mayuscula text-[0.8125rem] font-medium text-texto-secundario">
+            {format(today, "EEEE d 'de' MMMM", { locale: es })}
+          </p>
+          <h1 className="titulo text-balance text-[1.875rem] leading-[1.12] lg:text-[2.5rem]">
+            {saludo(today)}, <span className="text-acento-texto">{NOMBRE}</span>
+          </h1>
+          {bajada && (
+            <p className="entra mt-1.5 max-w-[62ch] text-[0.9375rem] text-texto-secundario" style={indice(2)}>
+              {bajada}
+            </p>
+          )}
+        </div>
 
-      {avisos.total > 0 && (
-        <section className="entra mb-4" style={indice(1)}>
-          <button
-            onClick={() => setAvisosAbiertos((v) => !v)}
-            aria-expanded={avisosAbiertos}
-            className="tocable papel flex w-full items-center gap-2.5 px-4 py-2.5 text-left text-[0.9375rem]"
-          >
-            <AlertTriangle size={16} className="shrink-0 text-ambar" />
-            <span className="shrink-0 font-semibold">
-              {avisos.total === 1 ? "1 aviso" : `${avisos.total} avisos`}
-            </span>
-            {!avisosAbiertos && <span className="min-w-0 flex-1 truncate text-texto-secundario">{lineasAviso[0].texto}</span>}
-            <ChevronDown
-              size={16}
-              className={cn(
-                "ml-auto shrink-0 text-texto-secundario transition-transform duration-300",
-                avisosAbiertos && "rotate-180",
+        <section className="destacado entra relative shrink-0 px-5 pb-4 pt-4 xl:w-[440px]" style={indice(1)}>
+          <div className="flex items-end justify-between gap-3">
+            <div>
+              <p className="text-[0.8125rem] font-medium text-sobre-oscuro/70">Lo de hoy</p>
+              {estado.tipo === "bloqueado" ? (
+                <p className="titulo text-[1.5rem] leading-tight">{estado.titulo}</p>
+              ) : estado.tipo === "libre" ? (
+                <p className="titulo text-[1.5rem] leading-tight">Nada por hacer</p>
+              ) : (
+                <p key={hoy.hechas} className="numeros pop titulo text-[2rem] leading-tight">
+                  {hoy.hechas}
+                  <span className="text-[1.125rem] font-medium text-sobre-oscuro/70"> de {hoy.total} hechas</span>
+                </p>
               )}
+            </div>
+            {estado.tipo === "en-curso" && <p className="numeros titulo text-[1.25rem] text-acento">{pct}%</p>}
+          </div>
+          {estado.tipo === "completo" && (
+            <Sello
+              texto="DÍA · CUMPLIDO · BIEN · HECHO ·"
+              className="sello-cae pointer-events-none absolute -top-3 right-3 h-[92px] w-[92px] text-acento"
             />
-          </button>
-          {avisosAbiertos && (
-            <ul className="mt-2 flex flex-col gap-1.5">
-              {lineasAviso.slice(0, 6).map((a, i) => (
-                <li key={a.id} className="desliza" style={indice(i)}>
-                  {a.href ? (
-                    <Link href={a.href} className="tocable block rounded-[12px] bg-ambar/10 px-4 py-2.5 text-[0.9375rem]">
-                      {a.texto}
-                    </Link>
-                  ) : (
-                    <p className="rounded-[12px] bg-ambar/10 px-4 py-2.5 text-[0.9375rem]">{a.texto}</p>
-                  )}
-                </li>
-              ))}
-              {lineasAviso.length > 6 && (
-                <li className="px-1 text-[0.8125rem] text-texto-secundario">
-                  y {lineasAviso.length - 6} más en la campanita
-                </li>
-              )}
-            </ul>
+          )}
+          {estado.tipo !== "libre" && hoy.total > 0 && (
+            <div
+              className="barra mt-3"
+              role="progressbar"
+              aria-valuemin={0}
+              aria-valuemax={hoy.total}
+              aria-valuenow={hoy.hechas}
+              aria-label="Avance del día"
+            >
+              <div className="barra-relleno" style={{ width: `${pct}%` }} />
+            </div>
+          )}
+          <p key={frase} className="aparece mt-2.5 text-[0.9375rem] font-medium leading-snug">
+            {frase}
+          </p>
+          {estado.tipo === "bloqueado" && hoy.total > 0 && (
+            <p className="numeros mt-0.5 text-[0.8125rem] text-sobre-oscuro/65">
+              Quedan los fijos y chequeos de todos los días: {hoy.hechas} de {hoy.total} hechos.
+            </p>
+          )}
+          {estado.tipo !== "bloqueado" && hoy.piezas > 0 && (
+            <p className="mt-0.5 text-[0.8125rem] text-sobre-oscuro/65">
+              Hoy te tocan {hoy.piezas} {hoy.piezas === 1 ? "pieza" : "piezas"}.
+              {carga?.semaforo === "sobrecargado" && " Es un día cargado: arrancá por lo de arriba."}
+            </p>
+          )}
+          {diasRacha >= 2 && (
+            <p className="mt-2 flex items-center gap-1.5 text-[0.8125rem] font-medium text-sobre-oscuro/80">
+              <Flame size={14} className="text-acento" /> {diasRacha} días seguidos al día
+            </p>
           )}
         </section>
-      )}
-
-      <section className="destacado entra relative mb-5 px-5 pb-4 pt-4" style={indice(2)}>
-        <div className="flex items-end justify-between gap-3">
-          <div>
-            <p className="text-[0.8125rem] font-medium text-sobre-oscuro/70">Lo de hoy</p>
-            {estado.tipo === "bloqueado" ? (
-              <p className="titulo text-[1.5rem] leading-tight">{estado.titulo}</p>
-            ) : estado.tipo === "libre" ? (
-              <p className="titulo text-[1.5rem] leading-tight">Nada por hacer</p>
-            ) : (
-              <p key={hoy.hechas} className="numeros pop titulo text-[2rem] leading-tight">
-                {hoy.hechas}
-                <span className="text-[1.125rem] font-medium text-sobre-oscuro/70"> de {hoy.total} hechas</span>
-              </p>
-            )}
-          </div>
-          {estado.tipo === "en-curso" && <p className="numeros titulo text-[1.25rem] text-acento">{pct}%</p>}
-        </div>
-        {estado.tipo === "completo" && (
-          <Sello
-            texto="DÍA · CUMPLIDO · BIEN · HECHO ·"
-            className="sello-cae pointer-events-none absolute -top-3 right-3 h-[92px] w-[92px] text-acento"
-          />
-        )}
-        {estado.tipo !== "libre" && hoy.total > 0 && (
-          <div
-            className="barra mt-3.5"
-            role="progressbar"
-            aria-valuemin={0}
-            aria-valuemax={hoy.total}
-            aria-valuenow={hoy.hechas}
-            aria-label="Avance del día"
-          >
-            <div className="barra-relleno" style={{ width: `${pct}%` }} />
-          </div>
-        )}
-        <p key={frase} className="aparece mt-3 text-[0.9375rem] font-medium leading-snug">
-          {frase}
-        </p>
-        {estado.tipo === "bloqueado" && hoy.total > 0 && (
-          <p className="numeros mt-0.5 text-[0.8125rem] text-sobre-oscuro/65">
-            Quedan los fijos y chequeos de todos los días: {hoy.hechas} de {hoy.total} hechos.
-          </p>
-        )}
-        {estado.tipo !== "bloqueado" && hoy.piezas > 0 && (
-          <p className="mt-0.5 text-[0.8125rem] text-sobre-oscuro/65">
-            Hoy te tocan {hoy.piezas} {hoy.piezas === 1 ? "pieza" : "piezas"}.
-            {carga?.semaforo === "sobrecargado" && " Es un día cargado: arrancá por lo de arriba."}
-          </p>
-        )}
-        {diasRacha >= 2 && (
-          <p className="mt-2 flex items-center gap-1.5 text-[0.8125rem] font-medium text-sobre-oscuro/80">
-            <Flame size={14} className="text-acento" /> {diasRacha} días seguidos al día
-          </p>
-        )}
-      </section>
+      </header>
       {cumplidoHoy && hoy.total > 0 && diasCumplidos && !diasCumplidos.has(todayISO) && (
         <RegistrarDiaCumplido fecha={todayISO} />
       )}
 
-      {error && <p className="mb-3 text-center text-[0.8125rem] text-[var(--color-error)]">{error}</p>}
-
-      {listas.length > 0 && (
-        <section className="entra mb-5" style={indice(3)}>
-          <h2 className="titulo mb-0.5 flex items-center justify-center gap-2 text-[1.125rem]">
-            <PackageCheck size={18} className="text-verde" />
-            {listas.length === 1 ? "Terminaste una entrega" : `Terminaste ${listas.length} entregas`}
+      {avisos.total > 0 && (
+        <section
+          className="entra mb-5 flex flex-wrap items-center gap-2 rounded-[18px] border border-borde/70 bg-bg-elevada px-3 py-2.5 shadow-[var(--shadow-papel)]"
+          style={indice(2)}
+        >
+          <h2 className="flex shrink-0 items-center gap-1.5 px-1 text-[0.9375rem] font-semibold">
+            <Bell size={16} className="text-acento-texto" />
+            Avisos
+            <span className="numeros rounded-full bg-acento/30 px-2 py-0.5 text-[0.75rem] text-acento-texto">{avisos.total}</span>
           </h2>
-          <p className="mb-3 text-center text-[0.8125rem] text-texto-secundario">
-            Ya se abrió el ciclo siguiente. Avisale al cliente que está lista.
-          </p>
-          <MensajesPendientes mensajes={listas} />
-        </section>
-      )}
-
-      {hitosHoy.length > 0 && (
-        <ul className="entra mb-5 flex flex-wrap justify-center gap-2" style={indice(3)}>
-          {hitosHoy.map((h, i) => {
-            const Icon = h.tipo === "grabacion" ? Video : h.tipo === "presentacion" ? Presentation : PackageCheck;
-            return (
-              <li
-                key={`${h.tipo}-${h.clienteId}-${i}`}
-                className="flex items-center gap-2 rounded-full bg-acento/25 py-1.5 pl-2.5 pr-3.5 text-[0.875rem] font-medium"
-              >
-                <Icon size={15} className="text-acento-texto" />
-                {h.detalle}
-              </li>
+          {(avisosAbiertos ? lineasAviso : lineasAviso.slice(0, AVISOS_VISIBLES)).map((a) => {
+            const contenido = (
+              <>
+                <span className="h-2 w-2 shrink-0 rounded-full bg-ambar" aria-hidden />
+                <span className="truncate">{a.texto}</span>
+              </>
+            );
+            const clase = "flex min-w-0 max-w-full items-center xl:max-w-[22rem] gap-2 rounded-[10px] bg-bg-hundida px-3 py-1.5 text-[0.8125rem]";
+            return a.href ? (
+              <Link key={a.id} href={a.href} className={cn("tocable hover:bg-borde/60", clase)}>
+                {contenido}
+              </Link>
+            ) : (
+              <p key={a.id} className={clase}>
+                {contenido}
+              </p>
             );
           })}
-        </ul>
-      )}
-
-      {hoy.items.length === 0 ? (
-        estado.tipo === "bloqueado" ? null : <EmptyState
-          sol={hayDatos}
-          title={hayDatos ? "Vas bien — nada para producir hoy" : "Todavía no hay clientes cargados"}
-          detail={
-            hayDatos
-              ? "No hay nada pendiente para hoy. Si te sobra tiempo, abajo tenés qué adelantar."
-              : "Agregá tu primer cliente para que la app arme el plan."
-          }
-        />
-      ) : (
-        <section className="entra" style={indice(4)}>
-          {seleccionables.length >= 2 && (
-            <div className="mb-1.5 flex justify-end gap-2">
-              {seleccion ? (
-                <>
-                  <button
-                    onClick={() => setSeleccion(new Set(seleccionables.map((i) => i.clave)))}
-                    className="tocable rounded-[10px] px-3 py-1.5 text-[0.8125rem] font-medium text-acento-texto"
-                  >
-                    Todas
-                  </button>
-                  <button
-                    onClick={() => setSeleccion(null)}
-                    className="tocable rounded-[10px] border border-borde px-3 py-1.5 text-[0.8125rem] font-medium hover:bg-borde/40"
-                  >
-                    Cancelar
-                  </button>
-                </>
-              ) : (
-                <button
-                  onClick={() => setSeleccion(new Set())}
-                  className="tocable flex items-center gap-1.5 rounded-[10px] border border-borde px-3 py-1.5 text-[0.8125rem] font-medium text-texto-secundario hover:bg-borde/40"
-                >
-                  <CheckCheck size={14} /> Tildar varias
-                </button>
-              )}
-            </div>
-          )}
-          <ul className="papel flex flex-col divide-y divide-borde/70 p-1.5">
-            {hoy.items.map((item, i) => (
-              <li key={item.clave} className="desliza" style={indice(i)}>
-                {filaDe(item)}
-              </li>
-            ))}
-          </ul>
-          {seleccion ? (
-            <div className="aviso-sube sticky bottom-[calc(96px+env(safe-area-inset-bottom,0px))] z-30 mt-3 flex items-center gap-3 rounded-[16px] bg-bg-elevada p-2 pl-4 shadow-[var(--shadow-papel-alto)] lg:bottom-6">
-              <span className="numeros flex-1 text-[0.9375rem] font-medium">
-                {seleccion.size === 0 ? "Elegí las que hiciste" : `${seleccion.size} ${seleccion.size === 1 ? "elegida" : "elegidas"}`}
-              </span>
-              <button
-                disabled={seleccion.size === 0}
-                onClick={() => tildarVarias(seleccion)}
-                className="boton-primario tocable rounded-[12px] px-4 py-2 text-[0.9375rem] font-medium disabled:opacity-50"
-              >
-                Marcar hechas
-              </button>
-            </div>
-          ) : (
-            <p className="mt-2 text-center text-[0.75rem] text-texto-secundario">
-              Deslizá a la derecha para tildar, a la izquierda para pasarla a mañana.
-            </p>
+          {lineasAviso.length > AVISOS_VISIBLES && (
+            <button
+              onClick={() => setAvisosAbiertos((v) => !v)}
+              aria-expanded={avisosAbiertos}
+              className="tocable rounded-[10px] px-2.5 py-1.5 text-[0.8125rem] font-medium text-acento-texto hover:bg-borde/40"
+            >
+              {avisosAbiertos ? "Ver menos" : `y ${lineasAviso.length - AVISOS_VISIBLES} más`}
+            </button>
           )}
         </section>
       )}
 
-      {hayPendiente && (
-        <section className="entra mt-8" style={indice(5)}>
-          <h2 className="titulo mb-0.5 text-center text-[1.125rem]">Pendiente y atrasado</h2>
-          <p className="mb-3 text-center text-[0.8125rem] text-texto-secundario">
-            Lo que no entra hoy o se pasó de fecha.
+      {error && <p className="mb-3 text-center text-[0.8125rem] text-[var(--color-error)]">{error}</p>}
+
+      <div className="grid items-start gap-4 xl:grid-cols-3 xl:gap-5">
+        <Columna
+          punto="bg-acento-texto"
+          titulo="Hoy"
+          cuenta={hoy.total}
+          className="xl:order-2"
+          style={indice(3)}
+          accion={
+            seleccionables.length >= 2 &&
+            (seleccion ? (
+              <div className="flex gap-1.5">
+                <button
+                  onClick={() => setSeleccion(new Set(seleccionables.map((i) => i.clave)))}
+                  className="tocable rounded-[10px] px-2.5 py-1 text-[0.8125rem] font-medium text-acento-texto"
+                >
+                  Todas
+                </button>
+                <button
+                  onClick={() => setSeleccion(null)}
+                  className="tocable rounded-[10px] border border-borde bg-bg-elevada px-2.5 py-1 text-[0.8125rem] font-medium hover:bg-borde/40"
+                >
+                  Cancelar
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => setSeleccion(new Set())}
+                className="tocable flex items-center gap-1.5 rounded-[10px] border border-borde bg-bg-elevada px-2.5 py-1 text-[0.8125rem] font-medium text-texto-secundario hover:bg-borde/40"
+              >
+                <CheckCheck size={14} /> Tildar varias
+              </button>
+            ))
+          }
+        >
+          {listas.length > 0 && (
+            <div className={cn(TARJETA, "mb-3 p-3")}>
+              <h3 className="titulo mb-0.5 flex items-center gap-2 text-[1rem]">
+                <PackageCheck size={17} className="text-verde" />
+                {listas.length === 1 ? "Terminaste una entrega" : `Terminaste ${listas.length} entregas`}
+              </h3>
+              <p className="mb-2.5 text-[0.8125rem] text-texto-secundario">
+                Ya se abrió el ciclo siguiente. Avisale al cliente que está lista.
+              </p>
+              <MensajesPendientes mensajes={listas} />
+            </div>
+          )}
+
+          {hitosHoy.length > 0 && (
+            <ul className="mb-3 flex flex-wrap gap-2">
+              {hitosHoy.map((h, i) => {
+                const Icon = h.tipo === "grabacion" ? Video : h.tipo === "presentacion" ? Presentation : PackageCheck;
+                return (
+                  <li
+                    key={`${h.tipo}-${h.clienteId}-${i}`}
+                    className="flex items-center gap-2 rounded-full bg-acento/25 py-1.5 pl-2.5 pr-3.5 text-[0.875rem] font-medium"
+                  >
+                    <Icon size={15} className="text-acento-texto" />
+                    {h.detalle}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+
+          {hoy.items.length === 0 ? (
+            estado.tipo === "bloqueado" ? null : (
+              <EmptyState
+                sol={hayDatos}
+                title={hayDatos ? "Vas bien — nada para producir hoy" : "Todavía no hay clientes cargados"}
+                detail={
+                  hayDatos
+                    ? "No hay nada pendiente para hoy. Si te sobra tiempo, tenés qué adelantar en Próximas entregas."
+                    : "Agregá tu primer cliente para que la app arme el plan."
+                }
+              />
+            )
+          ) : (
+            <>
+              <div className="flex flex-col gap-4">
+                {grupos.map((g) => (
+                  <div key={g.clave}>
+                    <h3 className="mb-2 flex items-center gap-1.5 px-1 text-[0.6875rem] font-semibold uppercase tracking-[0.08em] text-texto-secundario">
+                      <g.Icono size={13} /> {g.titulo}
+                    </h3>
+                    <ul className="flex flex-col gap-2">
+                      {g.items.map((item, i) => (
+                        <li key={item.clave} className={cn(TARJETA, "desliza overflow-hidden")} style={indice(i)}>
+                          {filaDe(item)}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ))}
+              </div>
+              {seleccion ? (
+                <div className="aviso-sube sticky bottom-[calc(96px+env(safe-area-inset-bottom,0px))] z-30 mt-3 flex items-center gap-3 rounded-[16px] bg-bg-elevada p-2 pl-4 shadow-[var(--shadow-papel-alto)] lg:bottom-6">
+                  <span className="numeros flex-1 text-[0.9375rem] font-medium">
+                    {seleccion.size === 0 ? "Elegí las que hiciste" : `${seleccion.size} ${seleccion.size === 1 ? "elegida" : "elegidas"}`}
+                  </span>
+                  <button
+                    disabled={seleccion.size === 0}
+                    onClick={() => tildarVarias(seleccion)}
+                    className="boton-primario tocable rounded-[12px] px-4 py-2 text-[0.9375rem] font-medium disabled:opacity-50"
+                  >
+                    Marcar hechas
+                  </button>
+                </div>
+              ) : (
+                <p className="mt-3 text-center text-[0.75rem] text-texto-secundario">
+                  Deslizá a la derecha para tildar, a la izquierda para pasarla a mañana.
+                </p>
+              )}
+            </>
+          )}
+        </Columna>
+
+        <Columna
+          punto="bg-[var(--color-error)]"
+          titulo="Urgente"
+          cuenta={cuentaUrgente}
+          className={cn("xl:order-1", !hayPendiente && "hidden xl:block")}
+          style={indice(4)}
+        >
+          <p className="-mt-1.5 mb-3 px-1 text-[0.8125rem] text-texto-secundario">
+            {hayPendiente ? "Lo que no entra hoy o se pasó de fecha." : "Nada atrasado: vas al día."}
           </p>
 
           {correrEntrega.length > 0 && (
-            <div className="mb-3">
-              <p className="mb-1.5 text-[0.8125rem] font-medium text-texto-secundario">
+            <div className={cn(TARJETA, URGENTE, "mb-2 p-3")}>
+              <p className="mb-2 text-[0.8125rem] font-medium text-texto-secundario">
                 Hay más urgente de lo que entra: conviene avisar y correr la entrega
               </p>
               <MensajesPendientes mensajes={correrEntrega} />
             </div>
           )}
 
-          {hoy.atrasadas.length > 0 && (
-            <ul className="papel flex flex-col divide-y divide-borde/70 p-1.5">
+          {(hoy.atrasadas.length > 0 || vencidos > 0 || reportesAtrasados > 0) && (
+            <ul className="flex flex-col gap-2">
               {hoy.atrasadas.map((a, i) => (
-                <li key={a.unidad.id} className="desliza" style={indice(i)}>
+                <li key={a.unidad.id} className={cn(TARJETA, URGENTE, "desliza overflow-hidden")} style={indice(i)}>
                   <FilaHoy
                     hecha={locales.has(a.unidad.id)}
                     titulo={a.unidad.etiqueta}
@@ -552,16 +616,11 @@ export default function HoyPage() {
                   />
                 </li>
               ))}
-            </ul>
-          )}
-
-          {(vencidos > 0 || reportesAtrasados > 0) && (
-            <ul className="mt-3 flex flex-col gap-2">
               {vencidos > 0 && (
                 <li>
                   <Link
                     href="/plata"
-                    className="tocable papel flex items-center gap-3 px-4 py-3 text-[0.9375rem] font-medium"
+                    className={cn(TARJETA, URGENTE, "tocable flex items-center gap-3 px-4 py-3 text-[0.9375rem] font-medium")}
                   >
                     <Wallet size={18} className="text-acento-texto" />
                     {vencidos === 1 ? "1 cobro vencido" : `${vencidos} cobros vencidos`}
@@ -573,7 +632,7 @@ export default function HoyPage() {
                 <li>
                   <Link
                     href="/ads"
-                    className="tocable papel flex items-center gap-3 px-4 py-3 text-[0.9375rem] font-medium"
+                    className={cn(TARJETA, URGENTE, "tocable flex items-center gap-3 px-4 py-3 text-[0.9375rem] font-medium")}
                   >
                     <FileText size={18} className="text-acento-texto" />
                     {reportesAtrasados === 1 ? "1 reporte de Ads atrasado" : `${reportesAtrasados} reportes de Ads atrasados`}
@@ -583,59 +642,80 @@ export default function HoyPage() {
               )}
             </ul>
           )}
-        </section>
-      )}
+        </Columna>
 
-      {adelantar.length > 0 && (
-        <section className="mt-8">
-          <button
-            onClick={() => setAdelantarAbierto((v) => !v)}
-            aria-expanded={adelantarAbierto}
-            className="tocable flex w-full items-center justify-center gap-2 rounded-[14px] px-3 py-2.5 text-[0.9375rem] font-medium text-texto-secundario hover:bg-borde/40"
-          >
-            Si me sobra tiempo
-            <span className="numeros rounded-full bg-borde/70 px-2 py-0.5 text-[0.75rem]">{adelantar.length}</span>
-            <ChevronDown
-              size={16}
-              className={cn("transition-transform duration-300", adelantarAbierto && "rotate-180")}
-            />
-          </button>
-          {adelantarAbierto && (
-            <div className="mt-2">
-              <p className="mb-2 text-center text-[0.8125rem] text-texto-secundario">
-                Lo próximo del plan que ya podés adelantar.
-              </p>
-              <ul className="papel flex flex-col divide-y divide-borde/70 p-1.5">
-                {adelantar.map((a, i) => (
-                  <li key={a.unidad.id} className="desliza" style={indice(i)}>
-                    <FilaHoy
-                      hecha={locales.has(a.unidad.id)}
-                      titulo={a.unidad.etiqueta}
-                      cliente={clienteDe(clients, a.unidad.clienteId)}
-                      detalle={<DetalleUnidad a={a} hoyISO={todayISO} />}
-                      onTildar={() => tildar(a)}
-                    />
-                  </li>
-                ))}
-              </ul>
+        <Columna punto="bg-verde" titulo="Próximas entregas" className="xl:order-3" style={indice(5)}>
+          {entregasPendientes.length === 0 ? (
+            <p className="px-1 pb-1 text-[0.8125rem] text-texto-secundario">No hay entregas pendientes.</p>
+          ) : (
+            <ul className="flex flex-col gap-2">
+              {entregasPendientes.slice(0, ENTREGAS_VISIBLES).map((e, i) => (
+                <li key={`${e.clienteId}-${e.fecha}`} className="desliza" style={indice(i)}>
+                  <FilaEntrega e={e} clients={clients} />
+                </li>
+              ))}
+            </ul>
+          )}
+          {entregasPendientes.length > ENTREGAS_VISIBLES && (
+            <Link
+              href="/calendario"
+              className="tocable mt-2 flex items-center justify-center gap-1.5 rounded-[12px] px-3 py-2 text-[0.8125rem] font-medium text-texto-secundario hover:bg-borde/40"
+            >
+              <CalendarDays size={14} /> Ver las {entregasPendientes.length} en el calendario
+            </Link>
+          )}
+
+          {adelantar.length > 0 && (
+            <div className="mt-3">
+              <button
+                onClick={() => setAdelantarAbierto((v) => !v)}
+                aria-expanded={adelantarAbierto}
+                className="tocable flex w-full items-center justify-center gap-1.5 rounded-[14px] border border-dashed border-texto-secundario/35 px-3 py-3 text-[0.875rem] text-texto-secundario hover:bg-borde/40"
+              >
+                Si te sobra tiempo:
+                <span className="numeros font-semibold text-texto">
+                  {adelantar.length} {adelantar.length === 1 ? "cosa" : "cosas"} para adelantar
+                </span>
+                <ChevronDown size={15} className={cn("transition-transform duration-300", adelantarAbierto && "rotate-180")} />
+              </button>
+              {adelantarAbierto && (
+                <div className="mt-2">
+                  <p className="mb-2 text-center text-[0.8125rem] text-texto-secundario">
+                    Lo próximo del plan que ya podés adelantar.
+                  </p>
+                  <ul className="flex flex-col gap-2">
+                    {adelantar.map((a, i) => (
+                      <li key={a.unidad.id} className={cn(TARJETA, "desliza overflow-hidden")} style={indice(i)}>
+                        <FilaHoy
+                          hecha={locales.has(a.unidad.id)}
+                          titulo={a.unidad.etiqueta}
+                          cliente={clienteDe(clients, a.unidad.clienteId)}
+                          detalle={<DetalleUnidad a={a} hoyISO={todayISO} />}
+                          onTildar={() => tildar(a)}
+                        />
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </div>
           )}
-        </section>
-      )}
 
-      <div className="mt-8 flex flex-col gap-2.5">
-        <button
-          onClick={() => setCierreAbierto(true)}
-          className="boton-primario tocable flex w-full items-center justify-center gap-2 rounded-[16px] px-5 py-3.5 font-medium"
-        >
-          <Moon size={18} strokeWidth={2} /> Cerrar el día
-        </button>
-        <button
-          onClick={() => setCambioAbierto(true)}
-          className="tocable w-full rounded-[16px] border border-borde bg-bg-elevada/60 px-5 py-3 text-center text-[0.9375rem] font-medium text-texto hover:bg-bg-elevada"
-        >
-          Algo cambió
-        </button>
+          <div className="mt-4 flex flex-col gap-2.5">
+            <button
+              onClick={() => setCierreAbierto(true)}
+              className="boton-primario tocable flex w-full items-center justify-center gap-2 rounded-[16px] px-5 py-3.5 font-medium"
+            >
+              <Moon size={18} strokeWidth={2} /> Cerrar el día
+            </button>
+            <button
+              onClick={() => setCambioAbierto(true)}
+              className="tocable w-full rounded-[16px] border border-borde bg-bg-elevada/60 px-5 py-3 text-center text-[0.9375rem] font-medium text-texto hover:bg-bg-elevada"
+            >
+              Algo cambió
+            </button>
+          </div>
+        </Columna>
       </div>
 
       <CerrarDia
@@ -663,6 +743,73 @@ export default function HoyPage() {
 
       <AvisoDeshacerToast aviso={aviso} onCerrar={cerrarAviso} />
     </div>
+  );
+}
+
+/** One of the three columns: a grey panel with a colored dot, a title and how many things it holds. */
+function Columna({
+  punto,
+  titulo,
+  cuenta,
+  accion,
+  className,
+  style,
+  children,
+}: {
+  punto: string;
+  titulo: string;
+  cuenta?: number;
+  accion?: React.ReactNode;
+  className?: string;
+  style?: React.CSSProperties;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className={cn("entra rounded-[24px] bg-borde/45 p-3 lg:p-4", className)} style={style}>
+      <div className="mb-3 flex min-h-8 items-center gap-2 px-1">
+        <span className={cn("h-2 w-2 shrink-0 rounded-full", punto)} aria-hidden />
+        <h2 className="titulo text-[1.0625rem]">{titulo}</h2>
+        {cuenta !== undefined && (
+          <span className="numeros rounded-full bg-bg-elevada px-2 py-0.5 text-[0.75rem] font-semibold">{cuenta}</span>
+        )}
+        {accion && <div className="ml-auto">{accion}</div>}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+/** A delivery coming up: its date, whose it is, what's left and its traffic light. */
+function FilaEntrega({ e, clients }: { e: Entrega; clients: Client[] }) {
+  const cliente = clienteDe(clients, e.clienteId);
+  const fecha = fromISODate(e.fecha);
+  const cuando = e.dias < 0 ? `atrasada ${-e.dias} ${e.dias === -1 ? "día" : "días"}` : e.dias === 0 ? "hoy" : e.dias === 1 ? "mañana" : `en ${e.dias} días`;
+  const partes = [
+    e.total > 0 && (e.faltan === 1 ? "falta 1 pieza" : `faltan ${e.faltan} piezas`),
+    cuando,
+    e.esperaGrabacion && "falta grabar",
+    e.esperaAprobacion && "espera aprobación",
+  ].filter(Boolean);
+  return (
+    <Link
+      href={`/clientes/${e.clienteId}`}
+      className={cn(TARJETA, "tocable flex items-center gap-3 p-2.5 hover:bg-bg-hundida/60")}
+    >
+      <span className="flex w-12 shrink-0 flex-col items-center rounded-[12px] border border-borde/80 py-1">
+        <span className="numeros titulo text-[1.25rem] leading-tight">{format(fecha, "d")}</span>
+        <span className="text-[0.625rem] font-medium uppercase tracking-wide text-texto-secundario">
+          {format(fecha, "MMM", { locale: es })}
+        </span>
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="flex items-center gap-1.5 font-semibold">
+          {cliente && <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: cliente.color }} aria-hidden />}
+          <span className="truncate">{cliente?.nombre ?? "Cliente"}</span>
+        </span>
+        <span className="block truncate text-[0.8125rem] text-texto-secundario">{partes.join(" · ")}</span>
+      </span>
+      <SemaforoPunto semaforo={e.semaforo} className="mr-1.5 h-2.5 w-2.5" />
+    </Link>
   );
 }
 
