@@ -7,6 +7,7 @@
 
 import { createElement, createContext, useContext, useEffect, useMemo } from "react";
 import { AlertaGlobal, alertasGlobales } from "@/lib/domain/alertas";
+import { fechasDeAds } from "@/lib/domain/ads";
 import { armarPlan } from "@/lib/domain/armar-plan";
 import { ciclosPorAbrir } from "@/lib/domain/ciclos";
 import { cobrosVencidos } from "@/lib/domain/cobros";
@@ -29,6 +30,7 @@ import {
 } from "@/lib/domain/types";
 import {
   abrirCiclo,
+  useAdsFechas,
   useAdsHistorial,
   useAdsReportes,
   useBlockedDates,
@@ -168,7 +170,8 @@ function useCalcularPlan(): PlanContext | null {
 
 function useCalcularAvisos(ctx: PlanContext | null): Avisos {
   const hechos = useMensajesHechos();
-  const firma = hechos ? [...hechos].sort().join("|") : undefined;
+  const adsFechas = useAdsFechas();
+  const firma = hechos ? JSON.stringify([[...hechos].sort(), adsFechas]) : undefined;
   return useMemo(() => {
     if (!ctx || !hechos) return VACIO;
     const alertas = alertasGlobales({
@@ -177,6 +180,7 @@ function useCalcularAvisos(ctx: PlanContext | null): Avisos {
       reportes: ctx.reportes,
       grabaciones: ctx.grabaciones,
       entregas: ctx.entregas,
+      fechasAds: fechasDeAds(ctx.clients, adsFechas ?? [], ctx.today),
       today: ctx.today,
     });
     const mensajes = mensajesPendientes({

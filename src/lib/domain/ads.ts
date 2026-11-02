@@ -14,8 +14,9 @@
 import { addDays, differenceInCalendarDays, format, getISOWeek, getISOWeekYear, startOfISOWeek, subMonths } from "date-fns";
 import { es } from "date-fns/locale";
 import { fromISODate, toISODate } from "./dates";
+import { proximasFechasDeAds } from "./fechas-especiales";
 import { UnidadTrabajo } from "./planner";
-import { AdsChequeo, AdsRegistro, AdsReporte, CADENCIA_RECAMBIO_DIAS, Client, EstructuraSemanal, diasDeTrabajo } from "./types";
+import { AdsChequeo, AdsFalta, AdsFecha, AdsRegistro, AdsReporte, CADENCIA_RECAMBIO_DIAS, Client, EstructuraSemanal, diasDeTrabajo } from "./types";
 
 /** How many pieces each routine counts as against the daily cap. */
 export const PESO_REVISION = 1;
@@ -240,6 +241,136 @@ export function saludCuenta(
   }
   if (!cliente.adsRefreshCreativos) return { tono: "ambar", motivo: "Sin fecha del último recambio" };
   return { tono: "verde", motivo: "Al día" };
+}
+
+/** The material for an ads swap is asked for this many days before it. */
+export const DIAS_PEDIR_MATERIAL = 7;
+
+/** The swap whose material is due to be asked for, if any. An account with no
+ * last swap has no real date yet, so there's nothing to ask for. */
+export function recambioAPedirMaterial(cliente: Client, clients: Client[], today: Date): string | undefined {
+  if (!cliente.adsRefreshCreativos) return undefined;
+  const toca = proximoRecambio(cliente, clients, today);
+  return differenceInCalendarDays(fromISODate(toca), today) <= DIAS_PEDIR_MATERIAL ? toca : undefined;
+}
+
+/** Day 5 of this month: when the month's reports are due. */
+export const venceReporte = (today: Date) => toISODate(new Date(today.getFullYear(), today.getMonth(), ULTIMO_DIA_REPORTE));
+
+/** What the account's card says in its corner. */
+export type EstadoCuentaAds =
+  | { tono: "rojo" | "acento" | "ambar" | "verde" | "gris"; texto: string };
+
+const DIAS_ARRANCA = 30;
+
+export interface CuentaAds {
+  cliente: Client;
+  chequeo?: AdsChequeo;
+  /** This week's review: the day it's due and when it was done. */
+  revision: { dia: string; hecha?: AdsRegistro };
+  /** When the next swap is due. */
+  recambio: string;
+  reporte?: FilaReporte;
+  faltan: AdsFalta[];
+  /** Things due today that aren't done. */
+  paraHoy: number;
+  /** Things whose day passed and aren't done. */
+  atrasadas: number;
+  estado: EstadoCuentaAds;
+}
+
+/** One account as the Ads screen shows it: what to do today and what's missing,
+ * with the accounts that need attention first. `materialPendiente` are the
+ * accounts with a "pedir material" message still to send. */
+export function cuentasDeAds(input: {
+  clients: Client[];
+  chequeos: AdsChequeo[];
+  historial: AdsRegistro[];
+  reportes: FilaReporte[];
+  faltan: AdsFalta[];
+  materialPendiente: Set<string>;
+  estructura: EstructuraSemanal;
+  today: Date;
+}): CuentaAds[] {
+  const { clients, chequeos, historial, reportes, faltan, materialPendiente, estructura, today } = input;
+  const hoy = toISODate(today);
+  const semana = semanaDe(today);
+  const diaRevision = diasDeRevision(clients, estructura);
+  const conRutina = new Set(cuentasConRutina(clients).map((c) => c.id));
+
+  const cuentas = clientesAds(clients).map((cliente): CuentaAds => {
+    const chequeo = chequeos.find((c) => c.clienteId === cliente.id && c.fecha === hoy);
+    const dia = enLaSemana(today, diaRevision.get(cliente.id) ?? 1);
+    const hecha = historial.find((r) => r.tipo === "revision" && r.clienteId === cliente.id && r.ref === semana);
+    const recambio = proximoRecambio(cliente, clients, today);
+    const reporte = reportes.find((r) => r.cliente.id === cliente.id);
+    const suyas = faltan.filter((f) => f.clienteId === cliente.id && !f.hecha);
+    const rutina = conRutina.has(cliente.id);
+
+    const pendientes = [
+      !chequeo && "hoy",
+      rutina && !hecha && (dia < hoy ? "atrasada" : dia === hoy && "hoy"),
+      rutina && (recambio < hoy ? "atrasada" : recambio === hoy && "hoy"),
+      reporte?.atrasado ? "atrasada" : reporte?.estado === "pendiente" && reporte.dia === hoy && "hoy",
+      materialPendiente.has(cliente.id) && "hoy",
+    ];
+    const paraHoy = pendientes.filter((p) => p === "hoy").length;
+    const atrasadas = pendientes.filter((p) => p === "atrasada").length;
+
+    const nueva = !cliente.adsEstrategia && differenceInCalendarDays(today, new Date(cliente.creadoEn)) <= DIAS_ARRANCA;
+    const estado: EstadoCuentaAds =
+      cliente.adsEstadoCuenta === "frenada-pago"
+        ? { tono: "rojo", texto: "Frenada por pago" }
+        : cliente.adsEstadoCuenta === "pausada"
+          ? { tono: "gris", texto: "Pausada" }
+          : atrasadas > 0
+            ? { tono: "rojo", texto: "Atrasado" }
+            : paraHoy > 0
+              ? { tono: "acento", texto: `${paraHoy} para hoy` }
+              : suyas.length > 0
+                ? { tono: "ambar", texto: `Falta ${suyas.length}` }
+                : nueva
+                  ? { tono: "ambar", texto: "Arranca" }
+                  : { tono: "verde", texto: "Al día" };
+
+    return { cliente, chequeo, revision: { dia, hecha }, recambio, reporte, faltan: suyas, paraHoy, atrasadas, estado };
+  });
+
+  return cuentas.sort(
+    (a, b) => b.atrasadas - a.atrasadas || b.paraHoy - a.paraHoy || b.faltan.length - a.faltan.length || a.cliente.nombre.localeCompare(b.cliente.nombre, "es"),
+  );
+}
+
+/** The campaigns for a special date have to be ready this many days before it. */
+export const DIAS_ARMAR_FECHA = 15;
+/** How far ahead a special date starts showing on the Ads screen. */
+const VENTANA_FECHAS_ADS = 60;
+
+export interface FechaDeAds {
+  id: string;
+  fecha: string;
+  nombre: string;
+  /** Campaigns ready by this day. */
+  armarAntes: string;
+  clientes: Client[];
+  hecha: boolean;
+  /** The day to have them ready has come and they aren't. */
+  vencida: boolean;
+}
+
+/** The special dates coming up, with the accounts each applies to (every account
+ * until Paula picks). A date applying to no account isn't shown. */
+export function fechasDeAds(clients: Client[], guardadas: AdsFecha[], today: Date): FechaDeAds[] {
+  const hoy = toISODate(today);
+  const cuentas = cuentasConRutina(clients);
+  return proximasFechasDeAds(today, VENTANA_FECHAS_ADS).flatMap(({ fecha, nombre }) => {
+    const guardada = guardadas.find((g) => g.id === fecha);
+    const clientes = guardada?.clientes ? cuentas.filter((c) => guardada.clientes?.includes(c.id)) : cuentas;
+    if (clientes.length === 0) return [];
+    const armarAntes = toISODate(addDays(fromISODate(fecha), -DIAS_ARMAR_FECHA));
+    const hecha = guardada?.hecha ?? false;
+    return [{ id: fecha, fecha, nombre, armarAntes, clientes, hecha, vencida: !hecha && armarAntes <= hoy }];
+  });
 }
 
 /** "lunes", "jueves": an account's review day. */

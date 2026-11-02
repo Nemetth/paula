@@ -75,7 +75,7 @@ export function AccionesGlobales() {
   );
 }
 
-function ListaAlertas({
+export function ListaAlertas({
   alertas,
   mensajes,
   onNavegar,

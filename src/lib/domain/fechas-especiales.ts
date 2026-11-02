@@ -86,6 +86,19 @@ export interface FechaEspecial {
   clienteIds: string[];
 }
 
+/** The commercial dates Paula runs campaigns for. */
+const FECHAS_DE_ADS = ["San Valentín", "Día del Padre", "Día de las Infancias", "Día de la Madre", "Black Friday", "Navidad"];
+
+/** Those dates in the next `dias` days, soonest first. */
+export function proximasFechasDeAds(today: Date, dias: number): { fecha: string; nombre: string }[] {
+  const desde = toISODate(today);
+  const hasta = toISODate(addDays(today, dias));
+  return REGLAS.filter((r) => FECHAS_DE_ADS.includes(r.nombre))
+    .flatMap((r) => [today.getFullYear(), today.getFullYear() + 1].map((anio) => ({ fecha: toISODate(r.fecha(anio)), nombre: r.nombre })))
+    .filter((f) => f.fecha >= desde && f.fecha <= hasta)
+    .sort((a, b) => a.fecha.localeCompare(b.fecha));
+}
+
 /** Special dates in the month of `ancla`: general ones always, rubro ones only
  * when an active client works in that rubro. */
 export function fechasEspecialesDelMes(ancla: Date, clients: Client[]): FechaEspecial[] {

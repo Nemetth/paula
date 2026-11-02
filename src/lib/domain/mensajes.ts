@@ -2,6 +2,7 @@
 
 import { differenceInCalendarDays, format } from "date-fns";
 import { es } from "date-fns/locale";
+import { cuentasConRutina, recambioAPedirMaterial } from "./ads";
 import { fromISODate } from "./dates";
 import { cobrosVencidos } from "./cobros";
 import { Entrega } from "./entregas";
@@ -11,6 +12,7 @@ import { Client, Cobro, Grabacion, ORDEN_TIPOS, Pieza } from "./types";
 
 export type TipoMensaje =
   | "pedir-material"
+  | "pedir-material-ads"
   | "avisar-grabacion"
   | "recordar-aprobacion"
   | "recordar-pago"
@@ -57,6 +59,8 @@ export function textoMensaje(
   switch (tipo) {
     case "pedir-material":
       return `${saludo} Para ir avanzando con tu contenido necesito que me mandes el material (fotos, videos y lo que tengas). Cuando lo tengas me avisás. Gracias!`;
+    case "pedir-material-ads":
+      return `${saludo} Se viene el recambio de tus anuncios. ¿Me mandás material nuevo (fotos, videos o lo que quieras mostrar)? Gracias!`;
     case "avisar-grabacion": {
       const cuando = fechaGrabacion
         ? `para el ${format(fromISODate(fechaGrabacion), "EEEE d 'de' MMMM", { locale: es })}`
@@ -182,6 +186,12 @@ export function mensajesPendientes(input: {
     if (cliente.tipo === "material-cliente" && estado.materialFecha && !estado.materialLlego) {
       if (differenceInCalendarDays(fromISODate(estado.materialFecha), today) <= 2) agregar("pedir-material", cliente, e.cicloId);
     }
+  }
+
+  // A week before each ads swap, ask for the material for it.
+  for (const c of cuentasConRutina(activos)) {
+    const toca = recambioAPedirMaterial(c, activos, today);
+    if (toca) agregar("pedir-material-ads", c, toca, {}, { titulo: "Pedir material para el recambio" });
   }
 
   for (const cobro of cobrosVencidos(cobros, clients, today)) {

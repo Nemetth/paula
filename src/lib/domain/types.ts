@@ -119,6 +119,8 @@ export interface Client {
   adsEstadoCuenta: AdsEstadoCuenta;
   /** Last time the ad creatives were refreshed (ISO date). */
   adsRefreshCreativos?: string;
+  /** The account's current strategy, in one line. */
+  adsEstrategia?: string;
   /** Last price increase (ISO date); the next one is due every 3 months. */
   ultimoAumento?: string;
   notasReunion?: string;
@@ -361,6 +363,34 @@ export interface AdsRegistro {
   tipo: "revision" | "recambio";
   ref: string;
   fecha: string;
+}
+
+/** An idea to try on an Ads account. */
+export interface AdsIdea {
+  id: string;
+  clienteId: string;
+  texto: string;
+  probada: boolean;
+  creadaEn: string;
+}
+
+/** "Falta: fotos nuevas": something Paula notes she's missing for an account. */
+export interface AdsFalta {
+  id: string;
+  clienteId: string;
+  texto: string;
+  /** "antes del 9 nov", when it has a date. */
+  fecha?: string;
+  hecha: boolean;
+  creadaEn: string;
+}
+
+/** What Paula set for a special date's campaigns. id = the date. */
+export interface AdsFecha {
+  id: string;
+  /** Accounts it applies to. Undefined = every account. */
+  clientes?: string[];
+  hecha: boolean;
 }
 
 // ---------------------------------------------------------------------------

@@ -3,14 +3,15 @@
 // ordered by how much it matters, with progress over it; and a second list below
 // with what is late or pending.
 
-import { addDays } from "date-fns";
-import { fromISODate, toISODate } from "./dates";
+import { addDays, format } from "date-fns";
+import { es } from "date-fns/locale";
+import { fechaCorta, fromISODate, toISODate } from "./dates";
 import { DIAS_URGENTE, Entrega, ORDEN_TIPOS } from "./entregas";
 import { cantidadPiezas } from "./labels";
-import { enumerar } from "./mensajes";
+import { corrimientosSugeridos, enumerar } from "./mensajes";
 import { Asignacion, CargaDia, Plan, UnidadTrabajo, atrasadasProximas, tareasDelDia } from "./planner";
-import { AdsChequeo, Client, FijoDiario } from "./types";
-import { clientesAds } from "./ads";
+import { AdsChequeo, AdsReporte, Client, FijoDiario, Pieza } from "./types";
+import { clientesAds, reportesDelMes, venceReporte } from "./ads";
 import type { TareaHecha } from "@/lib/supabase/data";
 
 /** Due in 3 days or less, already late, or unblocks a recording. */
@@ -31,8 +32,8 @@ export function porImportancia(a: Asignacion, b: Asignacion): number {
   );
 }
 
-/** "2 posteos, 1 reel, 1 guion". */
-export function resumenUnidades(unidades: UnidadTrabajo[]): string {
+/** ["2 posteos", "1 reel", "1 guion"]. */
+function partesDeUnidades(unidades: Pick<UnidadTrabajo, "tipo" | "piezaTipo" | "etiqueta">[]): string[] {
   const partes: string[] = [];
   for (const tipo of ORDEN_TIPOS) {
     const n = unidades.filter((u) => u.tipo === "edicion" && u.piezaTipo === tipo).length;
@@ -45,7 +46,12 @@ export function resumenUnidades(unidades: UnidadTrabajo[]): string {
   if (unidades.some((u) => u.tipo === "ads-recambio")) partes.push("recambio de anuncios");
   if (unidades.some((u) => u.tipo === "ads-reporte")) partes.push("reporte de Ads");
   for (const u of unidades) if (u.tipo === "tarea") partes.push(u.etiqueta);
-  return partes.join(", ");
+  return partes;
+}
+
+/** "2 posteos, 1 reel, 1 guion". */
+export function resumenUnidades(unidades: UnidadTrabajo[]): string {
+  return partesDeUnidades(unidades).join(", ");
 }
 
 export interface GrupoCliente {
@@ -85,7 +91,13 @@ export interface Hoy {
   piezas: number;
   /** Late work the plan can only fit on a later day, most important first. */
   atrasadas: Asignacion[];
+  /** Planned for today but past the day's cap: not on the list. What is late or
+   * can't make its delivery goes to Urgente; the rest simply waits. */
+  sinEntrar: Asignacion[];
 }
+
+/** Doesn't fit today and can't wait either. */
+const noPuedeEsperar = (a: Asignacion) => a.atrasada || a.sobrecarga;
 
 /** What kind of day it is. Hoy draws its summary from this one value only, so
  * it can never say "día completo" and "día bloqueado" at the same time. */
@@ -110,7 +122,166 @@ export function estadoDelDia(hoy: Hoy, carga?: CargaDia): EstadoDia {
   if (carga?.bloqueo) return { tipo: "bloqueado", ...BLOQUEO[carga.bloqueo] };
   if (hoy.total === 0) return { tipo: "libre" };
   if (hoy.hechas < hoy.total) return { tipo: "en-curso" };
-  return hoy.atrasadas.length > 0 ? { tipo: "completo-con-atrasos", atrasadas: hoy.atrasadas.length } : { tipo: "completo" };
+  const atrasadas = hoy.atrasadas.length + hoy.sinEntrar.filter(noPuedeEsperar).length;
+  return atrasadas > 0 ? { tipo: "completo-con-atrasos", atrasadas } : { tipo: "completo" };
+}
+
+/** "Hoy: 29 piezas de 6 clientes": the day's size, in one line. */
+export function lineaDelDia(hoy: Hoy): string | undefined {
+  const clientes = new Set(
+    hoy.items.flatMap((i) =>
+      i.tipo === "unidad" && i.asignacion.unidad.tipo === "edicion"
+        ? [i.asignacion.unidad.clienteId]
+        : i.tipo === "registro" && i.registro.tipo === "edicion"
+          ? [i.registro.clienteId]
+          : [],
+    ),
+  );
+  if (hoy.piezas === 0) return undefined;
+  return `Hoy: ${hoy.piezas} ${hoy.piezas === 1 ? "pieza" : "piezas"} de ${clientes.size} ${clientes.size === 1 ? "cliente" : "clientes"}`;
+}
+
+export type BloqueHoy = "contenido" | "ads";
+
+/** One card of today's list: a client's work in that block, ticked whole or opened
+ * to tick piece by piece. The daily checks and the fijos go together on a card too. */
+export interface TarjetaHoy {
+  clave: string;
+  bloque: BloqueHoy;
+  clienteId?: string;
+  titulo: string;
+  /** What's on it: ["3 historias", "1 posteo"]. Pending things; all of them once it's done. */
+  partes: string[];
+  /** The nearest date of what's pending, in words. */
+  detalle?: string;
+  /** Has a monthly report, whose text is written on the Ads screen. */
+  conReporte: boolean;
+  items: ItemHoy[];
+  pendientes: ItemHoy[];
+  /** Pending plan units: what can be moved to tomorrow. */
+  movibles: Asignacion[];
+}
+
+function bloqueDe(item: ItemHoy): BloqueHoy {
+  if (item.tipo === "ads") return "ads";
+  if (item.tipo === "fijo") return "contenido";
+  const tipo = item.tipo === "unidad" ? item.asignacion.unidad.tipo : item.registro.tipo;
+  return tipo.startsWith("ads") ? "ads" : "contenido";
+}
+
+/** The items as cards, in the order they first appear (so what's pending comes first). */
+export function tarjetasDeHoy(items: ItemHoy[], clients: Client[], piezas: Pieza[]): TarjetaHoy[] {
+  const nombres = new Map(clients.map((c) => [c.id, c.nombre]));
+  const grupos = new Map<string, { bloque: BloqueHoy; clienteId?: string; items: ItemHoy[] }>();
+  for (const item of items) {
+    const bloque = bloqueDe(item);
+    const clienteId = item.tipo === "unidad" ? item.asignacion.unidad.clienteId : item.tipo === "registro" ? item.registro.clienteId : undefined;
+    const clave = item.tipo === "ads" ? "chequeos" : item.tipo === "fijo" ? "fijos" : `${bloque}:${clienteId ?? ""}`;
+    const g = grupos.get(clave) ?? { bloque, clienteId, items: [] };
+    g.items.push(item);
+    grupos.set(clave, g);
+  }
+
+  const unidadDe = (i: ItemHoy): Pick<UnidadTrabajo, "tipo" | "piezaTipo" | "etiqueta">[] => {
+    if (i.tipo === "unidad") return [i.asignacion.unidad];
+    if (i.tipo !== "registro") return [];
+    const r = i.registro;
+    return [{ tipo: r.tipo as UnidadTrabajo["tipo"], etiqueta: r.etiqueta, piezaTipo: piezas.find((p) => p.id === r.unidadId.split(":")[0])?.tipo }];
+  };
+
+  const tarjetas = [...grupos].map(([clave, g]): TarjetaHoy => {
+    const pendientes = g.items.filter((i) => !i.hecha);
+    const movibles = pendientes.flatMap((i) => (i.tipo === "unidad" ? [i.asignacion] : []));
+    const base = { clave, bloque: g.bloque, clienteId: g.clienteId, items: g.items, pendientes, movibles };
+    const hechas = g.items.length - pendientes.length;
+    if (clave === "chequeos") {
+      return { ...base, titulo: "Chequeo diario", partes: [`${hechas} de ${g.items.length} ${g.items.length === 1 ? "cuenta" : "cuentas"}`], conReporte: false };
+    }
+    if (clave === "fijos") {
+      return { ...base, titulo: "Tus fijos", partes: [`${hechas} de ${g.items.length}`], conReporte: false };
+    }
+    const unidades = (pendientes.length > 0 ? pendientes : g.items).flatMap(unidadDe);
+    const limite = movibles.map((a) => a.unidad).filter((u) => u.limite).sort((a, b) => (a.limite as string).localeCompare(b.limite as string))[0];
+    return {
+      ...base,
+      titulo: (g.clienteId && nombres.get(g.clienteId)) || "Otras tareas",
+      partes: partesDeUnidades(unidades).concat(hechas > 0 && pendientes.length > 0 ? [`${hechas} de ${g.items.length} listas`] : []),
+      detalle: limite ? `${limite.tipo === "edicion" ? "entrega" : "para el"} ${fechaCorta(limite.limite as string)}` : undefined,
+      conReporte: unidades.some((u) => u.tipo === "ads-reporte"),
+    };
+  });
+
+  // The cards that gather several clients open their block; the fijos close theirs.
+  const orden = (t: TarjetaHoy) => (t.clave === "chequeos" ? 0 : t.clave === "fijos" ? 2 : 1);
+  return tarjetas.sort((a, b) => orden(a) - orden(b));
+}
+
+export type LineaUrgente =
+  | { clave: string; tipo: "entrega"; clienteId: string; faltan: number; fecha: string; vencida: boolean; fechaNueva: string }
+  | { clave: string; tipo: "reporte"; clienteId: string; etiqueta: string; fecha: string }
+  | { clave: string; tipo: "unidad"; asignacion: Asignacion };
+
+/** Urgente, one line per thing to decide: deliveries overdue or that can't make
+ * their date (to move them), reports past day 5, and any other work that is late
+ * or doesn't fit. Oldest first. */
+export function lineasUrgentes(input: {
+  hoy: Hoy;
+  plan: Plan;
+  entregas: Entrega[];
+  clients: Client[];
+  reportes: AdsReporte[];
+  today: Date;
+}): LineaUrgente[] {
+  const { hoy, plan, entregas, clients, reportes, today } = input;
+  const hoyISO = toISODate(today);
+  const corrimientos = new Map(corrimientosSugeridos(plan, clients).map((c) => [`${c.cliente.id}|${c.fechaEntrega}`, c.fechaNueva]));
+  const noEntran = hoy.sinEntrar.filter(noPuedeEsperar);
+
+  const deEntrega: LineaUrgente[] = entregas
+    .filter(
+      (e) =>
+        e.faltan > 0 &&
+        (e.dias < 0 ||
+          corrimientos.has(`${e.clienteId}|${e.fecha}`) ||
+          noEntran.some((a) => a.unidad.clienteId === e.clienteId && a.unidad.limite === e.fecha)),
+    )
+    .map((e) => {
+      const ultima = plan.asignaciones
+        .filter((a) => a.unidad.clienteId === e.clienteId && a.unidad.limite === e.fecha)
+        .map((a) => a.fecha)
+        .sort()
+        .at(-1);
+      const manana = toISODate(addDays(today, 1));
+      return {
+        clave: `entrega:${e.clienteId}:${e.fecha}`,
+        tipo: "entrega" as const,
+        clienteId: e.clienteId,
+        faltan: e.faltan,
+        fecha: e.fecha,
+        vencida: e.dias < 0,
+        fechaNueva: corrimientos.get(`${e.clienteId}|${e.fecha}`) ?? (ultima && ultima > hoyISO ? ultima : manana),
+      };
+    });
+
+  const deReporte: LineaUrgente[] = reportesDelMes(clients, reportes, today)
+    .filter((r) => r.atrasado)
+    .map((r) => ({
+      clave: `reporte:${r.cliente.id}`,
+      tipo: "reporte" as const,
+      clienteId: r.cliente.id,
+      etiqueta: `Reporte de ${format(fromISODate(`${r.periodo}-01`), "MMMM", { locale: es })}`,
+      fecha: venceReporte(today),
+    }));
+
+  // Pieces with a delivery are already on that delivery's line, and reports on theirs.
+  const sueltas = [...hoy.atrasadas, ...noEntran].filter((a) => a.unidad.tipo !== "ads-reporte" && !(a.unidad.tipo === "edicion" && a.unidad.limite));
+  const deUnidad: LineaUrgente[] = [...new Map(sueltas.map((a) => [a.unidad.id, a])).values()].map((asignacion) => ({
+    clave: asignacion.unidad.id,
+    tipo: "unidad" as const,
+    asignacion,
+  }));
+
+  return [...deEntrega, ...deReporte, ...deUnidad];
 }
 
 /** How many client groups the morning line names before "y N cosas más". */
@@ -181,10 +352,27 @@ export function armarHoy(input: {
   const { plan, hoyISO, clients, fijos, fijosHechos, chequeos, registros, locales } = input;
   const enRegistro = new Set(registros.map((r) => r.unidadId));
 
-  const delPlan = [...tareasDelDia(plan, hoyISO)].sort(porImportancia);
-  const unidades: ItemHoy[] = delPlan
-    // A tick the log already knows is shown from the log, not from the plan.
+  // A tick the log already knows is shown from the log, not from the plan.
+  const delPlan = tareasDelDia(plan, hoyISO)
     .filter((a) => !enRegistro.has(a.unidad.id))
+    .sort((a, b) => Number(locales.has(b.unidad.id)) - Number(locales.has(a.unidad.id)) || porImportancia(a, b));
+
+  // Only up to the day's cap. The plan's load is what was ticked plus today's
+  // units, so what's left of the cap doesn't change as she ticks: nothing new
+  // comes in and the "de N" holds.
+  const carga = plan.cargaPorDia[hoyISO];
+  const pesoDelPlan = tareasDelDia(plan, hoyISO).reduce((s, a) => s + a.unidad.peso, 0);
+  let libre = carga ? carga.capacidad - (carga.carga - pesoDelPlan) : Infinity;
+  const entran: Asignacion[] = [];
+  const sinEntrar: Asignacion[] = [];
+  for (const a of delPlan) {
+    if (a.unidad.peso <= libre + 1e-9) {
+      entran.push(a);
+      libre -= a.unidad.peso;
+    } else sinEntrar.push(a);
+  }
+
+  const unidades: ItemHoy[] = entran
     .map((asignacion) => ({
       clave: asignacion.unidad.id,
       tipo: "unidad" as const,
@@ -225,5 +413,6 @@ export function armarHoy(input: {
     atrasadas: atrasadasProximas(plan, hoyISO)
       .filter((a) => !enRegistro.has(a.unidad.id))
       .sort(porImportancia),
+    sinEntrar,
   };
 }

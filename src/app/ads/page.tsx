@@ -1,393 +1,313 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { differenceInCalendarDays, format, parse } from "date-fns";
+import { format } from "date-fns";
 import { es } from "date-fns/locale";
-import Link from "next/link";
-import { Check, ChevronDown, CircleAlert, ExternalLink } from "lucide-react";
+import { Star } from "lucide-react";
 import {
-  actualizarCliente,
+  desmarcarMensajeHecho,
   guardarChequeoAds,
+  guardarFechaAds,
   guardarReporteAds,
   guardarTextoReporte,
-  registrarAds,
+  marcarFaltaAds,
+  marcarMensajeHecho,
+  quitarChequeoAds,
   useAdsChequeos,
+  useAdsFaltan,
+  useAdsFechas,
+  useAdsIdeas,
+  useTareasHechas,
 } from "@/lib/supabase/data";
-import { usePlan } from "@/lib/supabase/use-plan";
+import { useAvisos, usePlan } from "@/lib/supabase/use-plan";
 import {
+  CuentaAds,
+  FechaDeAds,
   FilaReporte,
-  TonoCuenta,
+  PESO_RECAMBIO,
+  PESO_REPORTE,
+  PESO_REVISION,
   clientesAds,
   cuentasConRutina,
-  diasDeRevision,
-  enLaSemana,
-  hoyEnVentanaDeReportes,
-  nombreDia,
-  proximoRecambio,
+  cuentasDeAds,
+  fechasDeAds,
   reportesDelMes,
-  saludCuenta,
   semanaDe,
+  venceReporte,
 } from "@/lib/domain/ads";
-import { completarUnidad } from "@/lib/domain/completar";
-import { fechaCorta, fromISODate, toISODate } from "@/lib/domain/dates";
-import { ESTADO_CUENTA_ADS_LABEL } from "@/lib/domain/labels";
-import { AdsEstado, CADENCIA_RECAMBIO_DIAS, Client } from "@/lib/domain/types";
+import { colorCliente } from "@/lib/domain/calendario";
+import { completarUnidad, deshacerHecha } from "@/lib/domain/completar";
+import { fechaCorta, toISODate } from "@/lib/domain/dates";
+import { MensajePendiente } from "@/lib/domain/mensajes";
+import { UnidadTrabajo } from "@/lib/domain/planner";
+import { AdsFalta, Client } from "@/lib/domain/types";
+import { PanelReportes } from "@/components/ads/panel-reportes";
+import { TarjetaCuenta } from "@/components/ads/tarjeta-cuenta";
+import { avisarConDeshacer } from "@/components/aviso-deshacer";
 import { Cargando, EmptyState } from "@/components/empty-state";
-import { Encabezado } from "@/components/encabezado";
+import { BotonPrimario, Sheet } from "@/components/sheet";
+import { Tilde } from "@/components/tilde";
 import { cn, indice } from "@/lib/utils";
 
-const TONO_CUENTA: Record<TonoCuenta, string> = {
-  verde: "bg-verde",
-  ambar: "bg-ambar",
-  rojo: "bg-acento",
-  gris: "bg-borde",
-};
-
-const boton = "tocable shrink-0 rounded-[8px] border border-borde px-3 py-2 text-[0.8125rem] font-medium hover:bg-borde/40";
+/** An Ads routine as a unit of work, the same one Hoy ticks, so both show it done. */
+function rutina(tipo: "ads-revision" | "ads-recambio" | "ads-reporte", clienteId: string, ref: string, etiqueta: string, peso: number): UnidadTrabajo {
+  return { id: `${tipo}:${clienteId}:${ref}`, tipo, categoria: "ads", clienteId, etiqueta, peso, repartir: false, intocable: false };
+}
 
 export default function AdsPage() {
   const today = useMemo(() => new Date(), []);
   const hoyISO = toISODate(today);
   const ctx = usePlan();
+  const { mensajes } = useAvisos();
   const chequeos = useAdsChequeos();
+  const ideas = useAdsIdeas();
+  const faltan = useAdsFaltan();
+  const fechasGuardadas = useAdsFechas();
+  const hechasHoy = useTareasHechas(hoyISO);
   const [error, setError] = useState<string | null>(null);
+  const [reporteAbierto, setReporteAbierto] = useState<{ clienteId: string; campo: "analisis" | "estrategia" } | null>(null);
+  const [fechaEditada, setFechaEditada] = useState<string | null>(null);
 
   if (!ctx) return <Cargando />;
-  const { clients, reportes, adsHistorial, estructura, plan } = ctx;
+  const { clients, reportes, adsHistorial, estructura } = ctx;
 
-  const cuentas = clientesAds(clients);
-  const conRutina = cuentasConRutina(clients);
-  const chequeoHoy = new Map((chequeos ?? []).filter((c) => c.fecha === hoyISO).map((c) => [c.clienteId, c]));
-  const semana = semanaDe(today);
-  const diaRevision = diasDeRevision(clients, estructura);
-  const revisiones = conRutina
-    .map((c) => {
-      const dia = enLaSemana(today, diaRevision.get(c.id) ?? 1);
-      const hecha = adsHistorial.find((r) => r.tipo === "revision" && r.clienteId === c.id && r.ref === semana);
-      return { cliente: c, dia, hecha };
-    })
-    .sort((a, b) => a.dia.localeCompare(b.dia) || a.cliente.nombre.localeCompare(b.cliente.nombre));
-  const recambios = conRutina
-    .map((c) => ({ cliente: c, toca: proximoRecambio(c, clients, today) }))
-    .sort((a, b) => a.toca.localeCompare(b.toca));
   const filasReporte = reportesDelMes(clients, reportes, today, estructura);
-  const periodoReporte = filasReporte[0]?.periodo;
-  const contexto = { clients, historial: adsHistorial, estructura };
+  const paraPedir = mensajes.filter((m) => m.tipo === "pedir-material-ads");
+  const cuentas = cuentasDeAds({
+    clients,
+    chequeos: chequeos ?? [],
+    historial: adsHistorial,
+    reportes: filasReporte,
+    faltan: faltan ?? [],
+    materialPendiente: new Set(paraPedir.map((m) => m.cliente.id)),
+    estructura,
+    today,
+  });
+  const conRutina = new Set(cuentasConRutina(clients).map((c) => c.id));
+  const nuevas = cuentasConRutina(clients).filter((c) => !filasReporte.some((f) => f.cliente.id === c.id));
+  const fechas = fechasDeAds(clients, fechasGuardadas ?? [], today);
+  const semana = semanaDe(today);
+  const paraHoy = cuentas.reduce((s, c) => s + c.paraHoy, 0);
+  const atrasadas = cuentas.reduce((s, c) => s + c.atrasadas, 0);
+  const enviados = filasReporte.filter((f) => f.estado === "enviado").length;
+  const editada = fechas.find((f) => f.id === fechaEditada);
 
-  async function guardar(accion: () => Promise<unknown>) {
+  function guardar(accion: () => Promise<unknown>) {
     setError(null);
-    try {
-      await accion();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "No se pudo guardar. Probá de nuevo.");
+    void accion().catch((e) => setError(e instanceof Error ? e.message : "No se pudo guardar. Probá de nuevo."));
+  }
+
+  /** Do a routine, leaving the way back on the global notice. */
+  function hacer(unidad: UnidadTrabajo, cliente: Client) {
+    guardar(async () => {
+      const hecha = await completarUnidad(unidad, { clients });
+      avisarConDeshacer(`${cliente.nombre}: ${unidad.etiqueta}`, () => guardar(() => deshacerHecha(hecha)));
+    });
+  }
+
+  function hacerFalta(f: AdsFalta) {
+    guardar(async () => {
+      await marcarFaltaAds(f.id, true);
+      avisarConDeshacer(`Resuelto: ${f.texto}`, () => guardar(() => marcarFaltaAds(f.id, false)));
+    });
+  }
+
+  function hacerMaterial(m: MensajePendiente) {
+    guardar(async () => {
+      await marcarMensajeHecho(m.id, hoyISO);
+      avisarConDeshacer(`${m.cliente.nombre}: material pedido`, () => guardar(() => desmarcarMensajeHecho(m.id)));
+    });
+  }
+
+  function alternarEnviado(f: FilaReporte) {
+    const id = `ads-reporte:${f.cliente.id}:${f.periodo}`;
+    if (f.estado === "enviado") {
+      const registro = (hechasHoy ?? []).find((r) => r.unidadId === id);
+      guardar(() => (registro ? deshacerHecha(registro) : guardarReporteAds(f.cliente.id, f.periodo, "pendiente")));
+    } else {
+      const mes = format(new Date(`${f.periodo}-15T12:00:00`), "MMMM", { locale: es });
+      hacer(rutina("ads-reporte", f.cliente.id, f.periodo, `Reporte de Ads de ${mes}`, PESO_REPORTE), f.cliente);
     }
   }
 
-  /** Tick a routine the same way Hoy does when it is in the plan, so Hoy shows it done too. */
-  function hacer(prefijo: string, cliente: Client, directo: () => Promise<unknown>) {
-    const unidad = plan.asignaciones.find((a) => a.unidad.id.startsWith(`${prefijo}:${cliente.id}:`) && a.fecha <= hoyISO)?.unidad;
-    return guardar(() => (unidad ? completarUnidad(unidad, { clients }) : directo()));
+  function verReporte(c: CuentaAds) {
+    setReporteAbierto({ clienteId: c.cliente.id, campo: c.reporte?.reporte?.analisis ? "estrategia" : "analisis" });
+    document.getElementById(`reporte-${c.cliente.id}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
   }
 
   return (
-    <div className="mx-auto max-w-[640px] px-4 pt-2 lg:max-w-[880px] lg:px-8 lg:pt-4">
-      <Encabezado titulo="Ads" arriba={format(today, "EEEE d 'de' MMMM", { locale: es })} />
+    <div className="mx-auto max-w-[640px] px-4 pt-2 lg:max-w-[960px] lg:px-8 xl:max-w-[1360px] xl:pt-0">
+      <header className="entra mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="text-center sm:text-left">
+          <p className="mayuscula text-[0.8125rem] font-medium text-texto-secundario">{format(today, "EEEE d 'de' MMMM", { locale: es })}</p>
+          <h1 className="titulo text-[1.75rem] leading-[1.12] xl:text-[2rem]">Ads</h1>
+        </div>
+        {cuentas.length > 0 && (
+          <dl className="grid grid-cols-3 gap-2">
+            <Dato valor={paraHoy} texto={paraHoy === 1 ? "cosa para hoy" : "cosas para hoy"} tono="text-acento-texto" />
+            <Dato valor={atrasadas} texto={atrasadas === 1 ? "atrasada" : "atrasadas"} tono={atrasadas > 0 ? "text-[var(--color-error)]" : undefined} />
+            <Dato valor={`${enviados} de ${filasReporte.length}`} texto="reportes enviados" />
+          </dl>
+        )}
+      </header>
 
-      {error && <p className="mb-4 text-[0.8125rem] text-[var(--color-error)]">{error}</p>}
+      {error && <p className="mb-3 text-center text-[0.8125rem] text-[var(--color-error)]">{error}</p>}
 
-      {cuentas.length === 0 ? (
-        <EmptyState
-          title="No hay cuentas de Ads"
-          detail="Los clientes con servicio Ads o Contenido + Ads aparecen acá."
-        />
+      {clientesAds(clients).length === 0 ? (
+        <EmptyState title="No hay cuentas de Ads" detail="Los clientes con servicio Ads o Contenido + Ads aparecen acá." />
       ) : (
-        <div className="flex flex-col gap-9">
-          <section className="entra" style={indice(1)}>
-            <h2 className="mb-1 text-[0.9375rem] font-semibold">Todos los días: chequeo rápido</h2>
-            <p className="mb-2 text-[0.8125rem] text-texto-secundario">
-              Dejá una nota corta de lo que viste: queda en el historial de cada cliente.
-            </p>
-            <ul className="papel flex flex-col divide-y divide-borde/80 px-1.5">
-              {cuentas.map((c) => {
-                const chequeo = chequeoHoy.get(c.id);
-                const estado = chequeo?.estado;
-                const ultimaNota = (chequeos ?? [])
-                  .filter((x) => x.clienteId === c.id && x.fecha < hoyISO && x.nota)
-                  .sort((a, b) => b.fecha.localeCompare(a.fecha))[0];
-                const salud = saludCuenta(c, chequeos ?? [], today, contexto);
+        <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
+          <div className="flex min-w-0 flex-col gap-3">
+            <div className="flex items-baseline justify-between gap-3 px-1">
+              <h2 className="flex items-center gap-2 text-[0.875rem] font-semibold">
+                <span className="h-2 w-2 rounded-full bg-acento-texto" aria-hidden /> Qué hacer y qué falta, por cliente
+              </h2>
+              <p className="hidden text-[0.75rem] text-texto-secundario sm:block">Tildá lo que vas haciendo</p>
+            </div>
+
+            {fechas.length > 0 && (
+              <section className="papel entra px-4 py-2.5" style={indice(1)}>
+                <div className="mb-1 flex items-baseline justify-between gap-2">
+                  <h3 className="flex items-center gap-1.5 text-[0.8125rem] font-semibold">
+                    <Star size={13} className="text-acento-texto" /> Campañas por fechas especiales
+                  </h3>
+                  <p className="text-[0.75rem] text-texto-secundario">listas 15 días antes</p>
+                </div>
+                <ul className="flex flex-col divide-y divide-borde/50">
+                  {fechas.map((f) => (
+                    <FilaFecha key={f.id} f={f} onElegir={() => setFechaEditada(f.id)} guardar={guardar} />
+                  ))}
+                </ul>
+              </section>
+            )}
+
+            <div className="grid items-start gap-3 md:grid-cols-2">
+              {cuentas.map((c, i) => {
+                const id = c.cliente.id;
+                const registroRevision = (hechasHoy ?? []).find((r) => r.unidadId === `ads-revision:${id}:${semana}`);
                 return (
-                  <li key={c.id} className="flex flex-col gap-2 px-2 py-3">
-                    <div className="flex items-center gap-3">
-                      <span
-                        role="img"
-                        aria-label={salud.motivo}
-                        title={salud.motivo}
-                        className={cn("h-3 w-3 shrink-0 rounded-full", TONO_CUENTA[salud.tono])}
-                      />
-                      <div className="min-w-0 flex-1">
-                        <Link href={`/clientes/${c.id}`} className="block truncate font-semibold hover:underline">
-                          {c.nombre}
-                        </Link>
-                        <p className="flex items-center gap-2 text-[0.8125rem] text-texto-secundario">
-                          <span className={cn(salud.tono === "rojo" && "font-medium text-acento-texto", salud.tono === "ambar" && "font-medium text-ambar")}>
-                            {salud.tono === "verde" ? ESTADO_CUENTA_ADS_LABEL[c.adsEstadoCuenta] : salud.motivo}
-                          </span>
-                          {c.adsCuentaUrl && (
-                            <a
-                              href={/^https?:\/\//i.test(c.adsCuentaUrl) ? c.adsCuentaUrl : `https://${c.adsCuentaUrl}`}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="flex items-center gap-1 font-medium text-acento-texto"
-                            >
-                              Abrir cuenta <ExternalLink size={12} />
-                            </a>
-                          )}
-                        </p>
-                      </div>
-                      <Boton
-                        activo={estado === "ok"}
-                        tono="verde"
-                        onClick={() => guardar(() => guardarChequeoAds(c.id, hoyISO, "ok" as AdsEstado))}
-                      >
-                        <Check size={14} /> OK
-                      </Boton>
-                      <Boton
-                        activo={estado === "revisar"}
-                        tono="acento"
-                        onClick={() => guardar(() => guardarChequeoAds(c.id, hoyISO, "revisar" as AdsEstado))}
-                      >
-                        <CircleAlert size={14} /> Revisar
-                      </Boton>
-                    </div>
-                    <input
-                      key={chequeo?.nota ?? ""}
-                      defaultValue={chequeo?.nota ?? ""}
-                      onBlur={(e) => {
-                        const nota = e.target.value;
-                        if (nota.trim() === (chequeo?.nota ?? "")) return;
-                        guardar(() => guardarChequeoAds(c.id, hoyISO, estado ?? "ok", nota));
-                      }}
-                      placeholder={ultimaNota ? `Última nota (${fechaCorta(ultimaNota.fecha)}): ${ultimaNota.nota}` : "Nota del chequeo"}
-                      aria-label={`Nota del chequeo de ${c.nombre}`}
-                      className="input py-1.5 text-[0.875rem]"
+                  <div key={id} className="entra" style={indice(Math.min(i + 2, 8))}>
+                    <TarjetaCuenta
+                      cuenta={c}
+                      color={colorCliente(clients, id)}
+                      ideas={(ideas ?? []).filter((x) => x.clienteId === id)}
+                      material={paraPedir.find((m) => m.cliente.id === id)}
+                      hoyISO={hoyISO}
+                      conRutina={conRutina.has(id)}
+                      onChequeo={() => guardar(() => guardarChequeoAds(id, hoyISO, "ok"))}
+                      onDeshacerChequeo={() => guardar(() => quitarChequeoAds(id, hoyISO))}
+                      onRevision={() => hacer(rutina("ads-revision", id, semana, "Revisión semanal de anuncios", PESO_REVISION), c.cliente)}
+                      onDeshacerRevision={registroRevision ? () => guardar(() => deshacerHecha(registroRevision)) : undefined}
+                      onRecambio={() => hacer(rutina("ads-recambio", id, c.recambio, "Recambio de anuncios", PESO_RECAMBIO), c.cliente)}
+                      onMaterial={hacerMaterial}
+                      onMandarMaterial={(m) => guardar(() => marcarMensajeHecho(m.id, hoyISO))}
+                      onFalta={hacerFalta}
+                      onVerReporte={() => verReporte(c)}
+                      guardar={guardar}
                     />
-                  </li>
+                  </div>
                 );
               })}
-            </ul>
-          </section>
+            </div>
+          </div>
 
-          {conRutina.length > 0 && (
-            <>
-              <section className="entra" style={indice(2)}>
-                <h2 className="mb-1 text-[0.9375rem] font-semibold">Una vez por semana: revisión de anuncios</h2>
-                <p className="mb-2 text-[0.8125rem] text-texto-secundario">
-                  Cada cuenta tiene su día, repartidas en la semana. Aparece sola en Hoy y en el Calendario.
-                </p>
-                <ul className="papel flex flex-col divide-y divide-borde/80 px-1.5">
-                  {revisiones.map(({ cliente: c, dia, hecha }) => {
-                    const atrasada = !hecha && dia < hoyISO;
-                    return (
-                      <li key={c.id} className="flex items-center gap-3 px-2 py-3">
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate font-semibold">{c.nombre}</p>
-                          <p className={cn("text-[0.8125rem]", atrasada ? "font-medium text-acento-texto" : "text-texto-secundario")}>
-                            {hecha
-                              ? `Revisada el ${fechaCorta(hecha.fecha)}`
-                              : dia === hoyISO
-                                ? "Le toca hoy"
-                                : atrasada
-                                  ? `Le tocaba el ${nombreDia(fromISODate(dia).getDay())}`
-                                  : `Le toca el ${nombreDia(fromISODate(dia).getDay())}`}
-                          </p>
-                        </div>
-                        {hecha ? (
-                          <span className="flex shrink-0 items-center gap-1 rounded-[8px] bg-verde/15 px-3 py-2 text-[0.8125rem] font-medium text-verde">
-                            <Check size={14} /> Hecha
-                          </span>
-                        ) : (
-                          <button
-                            onClick={() =>
-                              hacer("ads-revision", c, async () => {
-                                await registrarAds({ clienteId: c.id, tipo: "revision", ref: semana, fecha: hoyISO });
-                                await actualizarCliente(c.id, { adsUltimaRevision: hoyISO });
-                              })
-                            }
-                            className={boton}
-                          >
-                            Revisada hoy
-                          </button>
-                        )}
-                      </li>
-                    );
-                  })}
-                </ul>
-              </section>
-
-              <section className="entra" style={indice(3)}>
-                <h2 className="mb-1 text-[0.9375rem] font-semibold">Cada {CADENCIA_RECAMBIO_DIAS} días: recambio de anuncios</h2>
-                <p className="mb-2 text-[0.8125rem] text-texto-secundario">
-                  Se cuenta desde el último recambio. Cuando le toca a una cuenta, te avisa y aparece en Hoy.
-                </p>
-                <ul className="papel flex flex-col divide-y divide-borde/80 px-1.5">
-                  {recambios.map(({ cliente: c, toca }) => {
-                    const dias = differenceInCalendarDays(fromISODate(toca), today);
-                    return (
-                      <li key={c.id} className="flex items-center gap-3 px-2 py-3">
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate font-semibold">{c.nombre}</p>
-                          <p className={cn("text-[0.8125rem]", dias <= 0 ? "font-medium text-acento-texto" : "text-texto-secundario")}>
-                            {dias < 0
-                              ? `Le toca desde hace ${-dias} ${dias === -1 ? "día" : "días"}`
-                              : dias === 0
-                                ? "Le toca hoy"
-                                : `Le toca el ${fechaCorta(toca)}`}
-                            {c.adsRefreshCreativos ? ` · último el ${fechaCorta(c.adsRefreshCreativos)}` : " · sin recambio cargado"}
-                          </p>
-                        </div>
-                        <button
-                          onClick={() =>
-                            hacer("ads-recambio", c, async () => {
-                              await registrarAds({ clienteId: c.id, tipo: "recambio", ref: hoyISO, fecha: hoyISO });
-                              await actualizarCliente(c.id, { adsRefreshCreativos: hoyISO });
-                            })
-                          }
-                          className={boton}
-                        >
-                          Renové hoy
-                        </button>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </section>
-            </>
-          )}
-
-          {filasReporte.length > 0 && (
-            <section className="entra" style={indice(4)}>
-              <h2 className="mb-1 text-[0.9375rem] font-semibold">
-                A principio de mes: reportes de{" "}
-                {periodoReporte ? format(parse(periodoReporte, "yyyy-MM", new Date()), "MMMM", { locale: es }) : "el mes"}
-              </h2>
-              <p className="mb-2 text-[0.8125rem] text-texto-secundario">
-                {hoyEnVentanaDeReportes(today)
-                  ? "Repartidos del 1 al 5, cada cliente en su día: estás en plazo."
-                  : "Se reparten del 1 al 5 de cada mes, cada cliente en su día."}{" "}
-                Abrí cada uno para escribir el análisis y la nueva estrategia.
-              </p>
-              <ul className="papel flex flex-col divide-y divide-borde/80 px-1.5">
-                {filasReporte.map((f) => (
-                  <FilaDeReporte
-                    key={f.cliente.id}
-                    fila={f}
-                    onEnviado={() =>
-                      f.estado === "enviado"
-                        ? guardar(() => guardarReporteAds(f.cliente.id, f.periodo, "pendiente"))
-                        : hacer("ads-reporte", f.cliente, () => guardarReporteAds(f.cliente.id, f.periodo, "enviado"))
-                    }
-                    onTexto={(cambios) => guardar(() => guardarTextoReporte(f.cliente.id, f.periodo, cambios))}
-                  />
-                ))}
-              </ul>
-            </section>
+          {(filasReporte.length > 0 || nuevas.length > 0) && (
+            <aside className="entra xl:sticky xl:top-14" style={indice(2)}>
+              <PanelReportes
+                filas={filasReporte}
+                nuevas={nuevas}
+                vence={venceReporte(today)}
+                color={(id) => colorCliente(clients, id)}
+                abierto={reporteAbierto}
+                onAbrir={setReporteAbierto}
+                onEnviado={alternarEnviado}
+                onTexto={(f, cambios) => guardar(() => guardarTextoReporte(f.cliente.id, f.periodo, cambios))}
+              />
+            </aside>
           )}
         </div>
       )}
+
+      <Sheet open={!!editada} title={editada ? `${editada.nombre} · a quién le aplica` : ""} onClose={() => setFechaEditada(null)}>
+        {editada && <ElegirClientes key={editada.id} f={editada} cuentas={cuentasConRutina(clients)} guardar={guardar} onCerrar={() => setFechaEditada(null)} />}
+      </Sheet>
     </div>
   );
 }
 
-/** One client's report: its day, sent or not, and the month's analysis and new strategy. */
-function FilaDeReporte({
-  fila: f,
-  onEnviado,
-  onTexto,
-}: {
-  fila: FilaReporte;
-  onEnviado: () => void;
-  onTexto: (cambios: { analisis?: string; estrategia?: string }) => void;
-}) {
-  const [abierta, setAbierta] = useState(false);
-  const texto = (campo: "analisis" | "estrategia", etiqueta: string, placeholder: string) => (
-    <label className="flex flex-col gap-1">
-      <span className="text-[0.8125rem] font-medium text-texto-secundario">{etiqueta}</span>
-      <textarea
-        key={f.reporte?.[campo] ?? ""}
-        defaultValue={f.reporte?.[campo] ?? ""}
-        rows={3}
-        placeholder={placeholder}
-        onBlur={(e) => {
-          if (e.target.value.trim() !== (f.reporte?.[campo] ?? "")) onTexto({ [campo]: e.target.value });
-        }}
-        className="input resize-y text-[0.9375rem]"
-      />
-    </label>
-  );
+function Dato({ valor, texto, tono }: { valor: number | string; texto: string; tono?: string }) {
   return (
-    <li className="px-2 py-3">
-      <div className="flex items-center gap-3">
-        <button onClick={() => setAbierta((a) => !a)} aria-expanded={abierta} className="tocable flex min-w-0 flex-1 items-center gap-2 text-left">
-          <span className="min-w-0 flex-1">
-            <span className="block truncate font-semibold">{f.cliente.nombre}</span>
-            <span className="block text-[0.8125rem] text-texto-secundario">
-              {f.estado === "enviado"
-                ? `Enviado${f.reporte?.enviadoEn ? ` el ${fechaCorta(f.reporte.enviadoEn)}` : ""}`
-                : f.dia
-                  ? `Para el ${fechaCorta(f.dia)}`
-                  : "Del 1 al 5"}
-              {(f.reporte?.analisis || f.reporte?.estrategia) && " · con análisis"}
-            </span>
+    <div className="papel px-3 py-2">
+      <dd className={cn("numeros titulo text-[1.125rem] leading-tight", tono)}>{valor}</dd>
+      <dt className="text-[0.6875rem] leading-tight text-texto-secundario">{texto}</dt>
+    </div>
+  );
+}
+
+/** A special date: tick it once its campaigns are ready, tap the names to choose who it applies to. */
+function FilaFecha({ f, onElegir, guardar }: { f: FechaDeAds; onElegir: () => void; guardar: (accion: () => Promise<unknown>) => void }) {
+  return (
+    <li className={cn("flex flex-wrap items-center gap-x-3 gap-y-1 py-1.5 text-[0.8125rem]", f.hecha && "opacity-55")}>
+      <Tilde
+        hecha={f.hecha}
+        label={`Marcar las campañas de ${f.nombre} como armadas`}
+        onTildar={() => guardar(() => guardarFechaAds(f.id, { hecha: true }))}
+        onDeshacer={() => guardar(() => guardarFechaAds(f.id, { hecha: false }))}
+      />
+      <span className={cn("font-semibold", f.hecha && "line-through")}>{f.nombre}</span>
+      <span className={cn("text-[0.75rem]", f.vencida ? "font-medium text-[var(--color-error)]" : "text-acento-texto")}>armar antes del {fechaCorta(f.armarAntes)}</span>
+      <button onClick={onElegir} aria-label={`Elegir a qué clientes aplica ${f.nombre}`} className="tocable ml-auto flex flex-wrap justify-end gap-1">
+        {f.clientes.map((c) => (
+          <span key={c.id} className="rounded-[6px] bg-bg-hundida px-1.5 py-0.5 text-[0.6875rem] text-texto-secundario">
+            {c.nombre}
           </span>
-          <ChevronDown size={16} className={cn("shrink-0 text-texto-secundario transition-transform duration-300", abierta && "rotate-180")} />
-        </button>
-        <button
-          onClick={onEnviado}
-          className={cn(
-            "tocable shrink-0 rounded-[8px] px-3 py-2 text-[0.8125rem] font-medium",
-            f.estado === "enviado" && "bg-verde/15 text-verde",
-            f.estado === "pendiente" && !f.atrasado && "bg-ambar/15 text-ambar",
-            f.atrasado && "bg-acento/15 text-acento-texto",
-          )}
-        >
-          {f.estado === "enviado" ? "Enviado" : f.atrasado ? "Atrasado" : "Pendiente"}
-        </button>
-      </div>
-      {abierta && (
-        <div className="aparece mt-3 flex flex-col gap-3">
-          {texto("analisis", "Análisis del mes", "Qué funcionó, qué no, resultados…")}
-          {texto("estrategia", "Nueva estructura o estrategia", "Qué cambia el mes que viene…")}
-        </div>
-      )}
+        ))}
+      </button>
     </li>
   );
 }
 
-function Boton({
-  activo,
-  tono,
-  onClick,
-  children,
+function ElegirClientes({
+  f,
+  cuentas,
+  guardar,
+  onCerrar,
 }: {
-  activo: boolean;
-  tono: "verde" | "acento";
-  onClick: () => void;
-  children: React.ReactNode;
+  f: FechaDeAds;
+  cuentas: Client[];
+  guardar: (accion: () => Promise<unknown>) => void;
+  onCerrar: () => void;
 }) {
+  const [elegidos, setElegidos] = useState(new Set(f.clientes.map((c) => c.id)));
   return (
-    <button
-      onClick={onClick}
-      aria-pressed={activo}
-      className={cn(
-        "tocable flex shrink-0 items-center gap-1 rounded-[8px] border px-3 py-2 text-[0.8125rem] font-medium",
-        activo
-          ? tono === "verde"
-            ? "pop border-verde/30 bg-verde/15 text-verde"
-            : "pop border-acento/30 bg-acento/15 text-acento-texto"
-          : "border-borde text-texto-secundario hover:bg-borde/40",
-      )}
-    >
-      {children}
-    </button>
+    <div className="flex flex-col gap-1">
+      {cuentas.map((c) => (
+        <label key={c.id} className="tocable flex cursor-pointer items-center gap-3 rounded-[12px] px-2 py-2.5 hover:bg-bg-hundida">
+          <input
+            type="checkbox"
+            checked={elegidos.has(c.id)}
+            onChange={() =>
+              setElegidos((prev) => {
+                const next = new Set(prev);
+                if (next.has(c.id)) next.delete(c.id);
+                else next.add(c.id);
+                return next;
+              })
+            }
+            className="h-[18px] w-[18px] shrink-0 accent-[var(--color-oscuro)]"
+          />
+          {c.nombre}
+        </label>
+      ))}
+      <BotonPrimario
+        className="mt-3"
+        onClick={() => {
+          guardar(() => guardarFechaAds(f.id, { clientes: [...elegidos] }));
+          onCerrar();
+        }}
+      >
+        Guardar
+      </BotonPrimario>
+    </div>
   );
 }

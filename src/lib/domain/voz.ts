@@ -32,8 +32,8 @@ export function fraseDelAvance(estado: EstadoDia, { total, hechas }: { total: nu
       return "Día completo. Bien ahí.";
     case "completo-con-atrasos":
       return estado.atrasadas === 1
-        ? "Hiciste lo de hoy. Abajo queda una atrasada, si te da."
-        : `Hiciste lo de hoy. Abajo quedan ${estado.atrasadas} atrasadas, si te da.`;
+        ? "Hiciste lo de hoy. En Urgente queda una, si te da."
+        : `Hiciste lo de hoy. En Urgente quedan ${estado.atrasadas}, si te da.`;
     case "en-curso": {
       const faltan = total - hechas;
       if (hechas === 0) return "Arrancá por lo de arriba.";

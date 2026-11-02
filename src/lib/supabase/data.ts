@@ -14,6 +14,9 @@ import { leerTabla } from "./leer";
 import {
   AdsChequeo,
   AdsEstado,
+  AdsFalta,
+  AdsFecha,
+  AdsIdea,
   AdsRegistro,
   AdsReporte,
   AdsEstadoCuenta,
@@ -117,6 +120,9 @@ type TareaRow = {
   creada_en: string;
 };
 type GastoRow = { id: string; fecha: string; concepto: string; monto: number };
+type AdsIdeaRow = { id: string; cliente_id: string; texto: string; probada: boolean; creada_en: string };
+type AdsFaltaRow = { id: string; cliente_id: string; texto: string; fecha: string | null; hecha: boolean; creada_en: string };
+type AdsFechaRow = { id: string; clientes: string[] | null; hecha: boolean };
 
 // ---------- generic live table hook ----------
 //
@@ -306,6 +312,35 @@ export function useAdsReportes(): AdsReporte[] | undefined {
 /** Weekly reviews and ads swaps done, per account: the Ads routines' history. */
 export function useAdsHistorial(): AdsRegistro[] | undefined {
   return useTable<AdsRegistroRow, AdsRegistro>("ads_historial", rowToAdsRegistro);
+}
+
+export function useAdsIdeas(): AdsIdea[] | undefined {
+  return useTable<AdsIdeaRow, AdsIdea>("ads_ideas", (r) => ({
+    id: r.id,
+    clienteId: r.cliente_id,
+    texto: r.texto,
+    probada: r.probada,
+    creadaEn: r.creada_en,
+  }));
+}
+
+export function useAdsFaltan(): AdsFalta[] | undefined {
+  return useTable<AdsFaltaRow, AdsFalta>("ads_faltan", (r) => ({
+    id: r.id,
+    clienteId: r.cliente_id,
+    texto: r.texto,
+    fecha: r.fecha ?? undefined,
+    hecha: r.hecha,
+    creadaEn: r.creada_en,
+  }));
+}
+
+export function useAdsFechas(): AdsFecha[] | undefined {
+  return useTable<AdsFechaRow, AdsFecha>("ads_fechas", (r) => ({
+    id: r.id,
+    clientes: r.clientes ?? undefined,
+    hecha: r.hecha,
+  }));
 }
 
 /** Where each delivery is in its flow (only the ones Paula moved). */
@@ -552,6 +587,7 @@ export interface NuevoClienteInput {
   adsCuentaUrl?: string;
   adsEstadoCuenta?: AdsEstadoCuenta;
   adsRefreshCreativos?: string;
+  adsEstrategia?: string;
   ultimoAumento?: string;
   notasReunion?: string;
 }
@@ -580,6 +616,7 @@ function clienteInputToRow(input: Partial<NuevoClienteInput>) {
     ads_cuenta_url: vaciable(input.adsCuentaUrl),
     ads_estado_cuenta: input.adsEstadoCuenta,
     ads_refresh_creativos: vaciable(input.adsRefreshCreativos),
+    ads_estrategia: vaciable(input.adsEstrategia),
     ultimo_aumento: vaciable(input.ultimoAumento),
     notas_reunion: vaciable(input.notasReunion),
   };
@@ -830,6 +867,37 @@ export async function guardarTextoReporte(
   if (error) throw error;
 }
 
+export async function crearIdeaAds(clienteId: string, texto: string): Promise<void> {
+  const { error } = await supabase().from("ads_ideas").insert({ cliente_id: clienteId, texto });
+  if (error) throw error;
+}
+
+export async function marcarIdeaAdsProbada(id: string, probada: boolean): Promise<void> {
+  const { error } = await supabase().from("ads_ideas").update({ probada }).eq("id", id);
+  if (error) throw error;
+}
+
+export async function eliminarIdeaAds(id: string): Promise<void> {
+  const { error } = await supabase().from("ads_ideas").delete().eq("id", id);
+  if (error) throw error;
+}
+
+export async function crearFaltaAds(clienteId: string, texto: string, fecha?: string): Promise<void> {
+  const { error } = await supabase().from("ads_faltan").insert({ cliente_id: clienteId, texto, fecha: fecha || null });
+  if (error) throw error;
+}
+
+export async function marcarFaltaAds(id: string, hecha: boolean): Promise<void> {
+  const { error } = await supabase().from("ads_faltan").update({ hecha }).eq("id", id);
+  if (error) throw error;
+}
+
+/** A special date's campaigns: which accounts they apply to, and whether they're ready. */
+export async function guardarFechaAds(id: string, cambios: { clientes?: string[]; hecha?: boolean }): Promise<void> {
+  const { error } = await supabase().from("ads_fechas").upsert({ id, ...cambios });
+  if (error) throw error;
+}
+
 /** Log an Ads routine as done (the weekly review or an ads swap). */
 export async function registrarAds(r: Omit<AdsRegistro, "id">): Promise<string> {
   const id = `${r.tipo}__${r.clienteId}__${r.ref}`;
@@ -934,6 +1002,11 @@ export async function quitarPospuesta(unidadId: string): Promise<void> {
 
 export async function marcarMensajeHecho(id: string, fechaISO: string): Promise<void> {
   const { error } = await supabase().from("mensajes_hechos").upsert({ id, fecha: fechaISO });
+  if (error) throw error;
+}
+
+export async function desmarcarMensajeHecho(id: string): Promise<void> {
+  const { error } = await supabase().from("mensajes_hechos").delete().eq("id", id);
   if (error) throw error;
 }
 
