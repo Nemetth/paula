@@ -121,6 +121,8 @@ export interface Client {
   adsRefreshCreativos?: string;
   /** The account's current strategy, in one line. */
   adsEstrategia?: string;
+  /** Day of the month its report is due. Empty = with the rest, days 1 to 5. */
+  adsDiaReporte?: number;
   /** Last price increase (ISO date); the next one is due every 3 months. */
   ultimoAumento?: string;
   notasReunion?: string;

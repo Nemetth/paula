@@ -5,6 +5,7 @@ import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { Star } from "lucide-react";
 import {
+  actualizarCliente,
   desmarcarMensajeHecho,
   guardarChequeoAds,
   guardarFechaAds,
@@ -33,7 +34,6 @@ import {
   fechasDeAds,
   reportesDelMes,
   semanaDe,
-  venceReporte,
 } from "@/lib/domain/ads";
 import { colorCliente } from "@/lib/domain/calendario";
 import { completarUnidad, deshacerHecha } from "@/lib/domain/completar";
@@ -41,7 +41,7 @@ import { fechaCorta, toISODate } from "@/lib/domain/dates";
 import { MensajePendiente } from "@/lib/domain/mensajes";
 import { UnidadTrabajo } from "@/lib/domain/planner";
 import { AdsFalta, Client } from "@/lib/domain/types";
-import { PanelReportes } from "@/components/ads/panel-reportes";
+import { CampoReporte, PanelReportes } from "@/components/ads/panel-reportes";
 import { TarjetaCuenta } from "@/components/ads/tarjeta-cuenta";
 import { avisarConDeshacer } from "@/components/aviso-deshacer";
 import { Cargando, EmptyState } from "@/components/empty-state";
@@ -65,7 +65,7 @@ export default function AdsPage() {
   const fechasGuardadas = useAdsFechas();
   const hechasHoy = useTareasHechas(hoyISO);
   const [error, setError] = useState<string | null>(null);
-  const [reporteAbierto, setReporteAbierto] = useState<{ clienteId: string; campo: "analisis" | "estrategia" } | null>(null);
+  const [reporteAbierto, setReporteAbierto] = useState<{ clienteId: string; campo: CampoReporte } | null>(null);
   const [fechaEditada, setFechaEditada] = useState<string | null>(null);
 
   if (!ctx) return <Cargando />;
@@ -216,12 +216,12 @@ export default function AdsPage() {
               <PanelReportes
                 filas={filasReporte}
                 nuevas={nuevas}
-                vence={venceReporte(today)}
                 color={(id) => colorCliente(clients, id)}
                 abierto={reporteAbierto}
                 onAbrir={setReporteAbierto}
                 onEnviado={alternarEnviado}
                 onTexto={(f, cambios) => guardar(() => guardarTextoReporte(f.cliente.id, f.periodo, cambios))}
+                onDia={(f, dia) => guardar(() => actualizarCliente(f.cliente.id, { adsDiaReporte: dia }))}
               />
             </aside>
           )}

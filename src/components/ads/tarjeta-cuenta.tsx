@@ -227,7 +227,7 @@ export function TarjetaCuenta({
                 ) : reporte.atrasado ? (
                   <span className={ROJO}>atrasado</span>
                 ) : (
-                  faltaDelReporte
+                  `${faltaDelReporte} · vence ${fechaCorta(reporte.vence)}`
                 )}
               </span>
             </button>

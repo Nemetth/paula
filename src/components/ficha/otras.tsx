@@ -5,6 +5,7 @@ import Link from "next/link";
 import { differenceInCalendarDays, format } from "date-fns";
 import { es } from "date-fns/locale";
 import { Check, CircleAlert, ExternalLink, MessageCircle } from "lucide-react";
+import { CampoDiaReporte } from "@/components/ads/dia-reporte";
 import { BotonEliminar } from "@/components/boton-eliminar";
 import { CampoFecha } from "@/components/clientes/tarjeta-cliente";
 import {
@@ -208,12 +209,16 @@ export function PanelAds({
                 </button>
               </div>
             </div>
-            <p className="text-[0.9375rem]">
-              <span className="font-medium">Reporte mensual:</span> del 1 al 5 ·{" "}
-              <Link href="/ads" className="font-medium text-acento-texto">
-                Escribir en Ads
-              </Link>
-            </p>
+            <div className="flex flex-col gap-2">
+              <p className="text-[0.9375rem]">
+                <span className="font-medium">Reporte mensual:</span>{" "}
+                {cliente.adsDiaReporte ? `el ${cliente.adsDiaReporte} de cada mes` : "del 1 al 5"} ·{" "}
+                <Link href="/ads" className="font-medium text-acento-texto">
+                  Escribir en Ads
+                </Link>
+              </p>
+              <CampoDiaReporte cliente={cliente} onGuardar={(dia) => guardar(() => actualizarCliente(cliente.id, { adsDiaReporte: dia }))} />
+            </div>
           </div>
         </Seccion>
       )}

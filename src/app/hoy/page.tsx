@@ -35,16 +35,20 @@ import { useAvisos, usePlan } from "@/lib/supabase/use-plan";
 import { lineasDeAviso } from "@/lib/domain/alertas";
 import { Asignacion, sugerirAdelanto } from "@/lib/domain/planner";
 import {
+  DatosDeTarjetas,
   ItemHoy,
-  LineaUrgente,
+  LineaEntrega,
   TarjetaHoy as DatosTarjeta,
   agruparPorCliente,
   armarHoy,
+  detalleDeEntrega,
   estadoDelDia,
   lineaDelDia,
   lineasUrgentes,
   racha,
+  tarjetaDeEntrega,
   tarjetasDeHoy,
+  tarjetasUrgentes,
 } from "@/lib/domain/hoy";
 import { completarUnidad, deshacerHecha, sePuedeTildar } from "@/lib/domain/completar";
 import { fromISODate, toISODate } from "@/lib/domain/dates";
@@ -55,8 +59,7 @@ import { ListaAlertas } from "@/components/acciones-globales";
 import { DisruptionSheet } from "@/components/disruption-sheet";
 import { Cargando, EmptyState } from "@/components/empty-state";
 import { SemaforoPunto } from "@/components/entrega";
-import type { Entrega } from "@/lib/domain/entregas";
-import { CorrerEntrega, FilaUrgente } from "@/components/hoy/urgente";
+import { CorrerEntrega } from "@/components/hoy/urgente";
 import { TarjetaHoy } from "@/components/hoy/tarjeta-hoy";
 import { Inki } from "@/components/inki";
 import { Sello } from "@/components/sello";
@@ -64,8 +67,6 @@ import { AvisoDeshacer, AvisoDeshacerToast } from "@/components/aviso-deshacer";
 import { BotonPrimario, Sheet } from "@/components/sheet";
 import { cn, indice } from "@/lib/utils";
 
-/** One white card per row, on the grey of its column. */
-const TARJETA = "rounded-[14px] border border-borde/70 bg-bg-elevada shadow-[var(--shadow-papel)]";
 const AVISOS_VISIBLES = 3;
 const URGENTES_VISIBLES = 5;
 const ENTREGAS_VISIBLES = 6;
@@ -85,7 +86,7 @@ export default function HoyPage() {
   const [avisosAbiertos, setAvisosAbiertos] = useState(false);
   const [adelantarAbierto, setAdelantarAbierto] = useState(false);
   const [urgentesAbiertos, setUrgentesAbiertos] = useState(false);
-  const [aCorrer, setACorrer] = useState<Extract<LineaUrgente, { tipo: "entrega" }> | null>(null);
+  const [aCorrer, setACorrer] = useState<LineaEntrega | null>(null);
   const [locales, setLocales] = useState<Set<string>>(new Set());
   const [aviso, setAviso] = useState<AvisoDeshacer | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -144,7 +145,8 @@ export default function HoyPage() {
   const hayDatos = clients.some((c) => c.activo);
 
   const lineasAviso = lineasDeAviso(alertas, mensajes, avisos.cobrosVencidos.length, clients);
-  const urgentes = lineasUrgentes({ hoy, plan, entregas: ctx.entregas, clients, reportes: ctx.reportes, today });
+  const datosTarjetas: DatosDeTarjetas = { clients, piezas, registros: registros ?? [], locales, hoyISO: todayISO };
+  const urgentes = tarjetasUrgentes(lineasUrgentes({ hoy, plan, entregas: ctx.entregas, clients, reportes: ctx.reportes, today }), datosTarjetas);
   const urgentesVisibles = urgentesAbiertos ? urgentes : urgentes.slice(0, URGENTES_VISIBLES);
   const tarjetas = tarjetasDeHoy(hoy.items, clients, piezas);
   const bloques = BLOQUES.map((b) => ({ ...b, tarjetas: tarjetas.filter((t) => t.bloque === b.clave) })).filter((b) => b.tarjetas.length > 0);
@@ -227,13 +229,14 @@ export default function HoyPage() {
     });
   }
 
-  const tarjetaDe = (t: DatosTarjeta) => (
+  const tarjetaDe = (t: DatosTarjeta, extras?: Pick<React.ComponentProps<typeof TarjetaHoy>, "inicio" | "fin" | "accion" | "className">) => (
     <TarjetaHoy
       tarjeta={t}
       color={t.clienteId ? colorCliente(clients, t.clienteId) : undefined}
       onTildar={tildar}
       onDeshacer={destildar}
       onManana={pasarAManana}
+      {...extras}
     />
   );
 
@@ -427,9 +430,19 @@ export default function HoyPage() {
           ) : (
             <>
               <ul className="flex flex-col gap-1.5">
-                {urgentesVisibles.map((l, i) => (
-                  <li key={l.clave} className="desliza" style={indice(i)}>
-                    <FilaUrgente linea={l} clients={clients} onCorrer={setACorrer} onTildar={(a) => tildar([itemDeUnidad(a)])} />
+                {urgentesVisibles.map(({ tarjeta, entrega }, i) => (
+                  <li key={tarjeta.clave} className="desliza" style={indice(i)}>
+                    {tarjetaDe(tarjeta, {
+                      className: "border-l-[3px] border-l-[var(--color-error)]",
+                      accion: entrega && (
+                        <button
+                          onClick={() => setACorrer(entrega)}
+                          className="tocable shrink-0 rounded-[10px] border border-borde px-2.5 py-1 text-[0.75rem] font-medium hover:bg-borde/40"
+                        >
+                          Correr entrega
+                        </button>
+                      ),
+                    })}
                   </li>
                 ))}
               </ul>
@@ -474,7 +487,10 @@ export default function HoyPage() {
             <ul className="flex flex-col gap-1.5">
               {entregasPendientes.slice(0, ENTREGAS_VISIBLES).map((e, i) => (
                 <li key={`${e.clienteId}-${e.fecha}`} className="desliza" style={indice(i)}>
-                  <FilaEntrega e={e} clients={clients} />
+                  {tarjetaDe(tarjetaDeEntrega(e, detalleDeEntrega(e), datosTarjetas), {
+                    inicio: <FechaEntrega fecha={e.fecha} />,
+                    fin: <SemaforoPunto semaforo={e.semaforo} className="h-2.5 w-2.5" />,
+                  })}
                 </li>
               ))}
             </ul>
@@ -583,43 +599,15 @@ function Columna({
   );
 }
 
-/** A delivery coming up: its date, whose it is, what's left and its traffic light. */
-function FilaEntrega({ e, clients }: { e: Entrega; clients: Client[] }) {
-  const cliente = clienteDe(clients, e.clienteId);
-  const fecha = fromISODate(e.fecha);
-  const cuando = e.dias < 0 ? `atrasada ${-e.dias} ${e.dias === -1 ? "día" : "días"}` : e.dias === 0 ? "hoy" : e.dias === 1 ? "mañana" : `en ${e.dias} días`;
-  const partes = [
-    e.total > 0 && (e.faltan === 1 ? "falta 1 pieza" : `faltan ${e.faltan} piezas`),
-    cuando,
-    e.esperaGrabacion && "falta grabar",
-    e.esperaAprobacion && "espera aprobación",
-  ].filter(Boolean);
+/** A delivery's date, as a small calendar leaf. */
+function FechaEntrega({ fecha }: { fecha: string }) {
+  const dia = fromISODate(fecha);
   return (
-    <Link
-      href={`/clientes/${e.clienteId}`}
-      className={cn(TARJETA, "tocable flex items-center gap-3 px-2.5 py-2 text-[0.875rem] hover:bg-bg-hundida/60")}
-    >
-      <span className="flex w-10 shrink-0 flex-col items-center rounded-[10px] border border-borde/80 py-0.5">
-        <span className="numeros titulo text-[1.0625rem] leading-tight">{format(fecha, "d")}</span>
-        <span className="text-[0.625rem] font-medium uppercase tracking-wide text-texto-secundario">
-          {format(fecha, "MMM", { locale: es })}
-        </span>
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="flex items-center gap-1.5 font-semibold">
-          {cliente && <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: cliente.color }} aria-hidden />}
-          <span className="truncate">{cliente?.nombre ?? "Cliente"}</span>
-        </span>
-        <span className="block truncate text-[0.8125rem] text-texto-secundario">{partes.join(" · ")}</span>
-      </span>
-      <SemaforoPunto semaforo={e.semaforo} className="mr-1.5 h-2.5 w-2.5" />
-    </Link>
+    <span className="flex w-10 shrink-0 flex-col items-center rounded-[10px] border border-borde/80 py-0.5">
+      <span className="numeros titulo text-[1.0625rem] leading-tight">{format(dia, "d")}</span>
+      <span className="text-[0.625rem] font-medium uppercase tracking-wide text-texto-secundario">{format(dia, "MMM", { locale: es })}</span>
+    </span>
   );
-}
-
-function clienteDe(clients: Client[], id?: string) {
-  const c = clients.find((x) => x.id === id);
-  return c ? { id: c.id, nombre: c.nombre, color: colorCliente(clients, c.id) } : undefined;
 }
 
 /** Writes today into the streak once everything is done. Rendered only then. */

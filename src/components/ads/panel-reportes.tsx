@@ -2,13 +2,15 @@
 
 import { addMonths, format } from "date-fns";
 import { es } from "date-fns/locale";
-import { Check } from "lucide-react";
+import { CalendarDays, Check } from "lucide-react";
+import { CampoDiaReporte } from "@/components/ads/dia-reporte";
 import { FilaReporte } from "@/lib/domain/ads";
 import { fechaCorta, fromISODate } from "@/lib/domain/dates";
 import { Client } from "@/lib/domain/types";
 import { cn } from "@/lib/utils";
 
-type Campo = "analisis" | "estrategia";
+/** What a row has open: one of its texts, or its due day. */
+export type CampoReporte = "analisis" | "estrategia" | "dia";
 
 /** One step of a report: done shows ticked, tapping opens or sends it. */
 function Paso({ hecho, activo, onClick, children }: { hecho: boolean; activo?: boolean; onClick: () => void; children: React.ReactNode }) {
@@ -28,28 +30,28 @@ function Paso({ hecho, activo, onClick, children }: { hecho: boolean; activo?: b
   );
 }
 
-/** The month's reports (days 1 to 5): per client, analysis, new strategy and sent.
- * Past the date, in red. */
+/** The month's reports: per client, analysis, new strategy and sent, with the day
+ * it's due (tap it to change it). Past the date, in red. */
 export function PanelReportes({
   filas,
   nuevas,
-  vence,
   color,
   abierto,
   onAbrir,
   onEnviado,
   onTexto,
+  onDia,
 }: {
   filas: FilaReporte[];
   /** Accounts too new to have a report this month. */
   nuevas: Client[];
-  vence: string;
   color: (clienteId: string) => string;
-  /** The row open and which of its texts, if any. */
-  abierto: { clienteId: string; campo: Campo } | null;
-  onAbrir: (a: { clienteId: string; campo: Campo } | null) => void;
+  /** The row open and what it has open, if any. */
+  abierto: { clienteId: string; campo: CampoReporte } | null;
+  onAbrir: (a: { clienteId: string; campo: CampoReporte } | null) => void;
   onEnviado: (f: FilaReporte) => void;
   onTexto: (f: FilaReporte, cambios: { analisis?: string; estrategia?: string }) => void;
+  onDia: (f: FilaReporte, dia: number | null) => void;
 }) {
   const periodo = filas[0]?.periodo;
   const enviados = filas.filter((f) => f.estado === "enviado").length;
@@ -58,7 +60,7 @@ export function PanelReportes({
   return (
     <section className="papel px-4 py-3.5">
       <h2 className="titulo text-[1rem]">Reportes{periodo ? ` de ${format(fromISODate(`${periodo}-01`), "MMMM", { locale: es })}` : ""}</h2>
-      <p className="text-[0.75rem] text-texto-secundario">Se hacen del 1 al 5 de cada mes</p>
+      <p className="text-[0.75rem] text-texto-secundario">Del 1 al 5, o el día de cada cliente: tocá la fecha para cambiarlo</p>
       <p className="numeros titulo mt-2 text-[1.75rem] leading-none">
         {enviados}
         <span className="text-[0.8125rem] font-medium text-texto-secundario"> de {filas.length} enviados</span>
@@ -70,7 +72,7 @@ export function PanelReportes({
       <ul className="mt-3 flex flex-col gap-1">
         {filas.map((f) => {
           const abierta = abierto?.clienteId === f.cliente.id ? abierto.campo : null;
-          const alternar = (campo: Campo) => onAbrir(abierta === campo ? null : { clienteId: f.cliente.id, campo });
+          const alternar = (campo: CampoReporte) => onAbrir(abierta === campo ? null : { clienteId: f.cliente.id, campo });
           return (
             <li
               key={f.cliente.id}
@@ -80,14 +82,18 @@ export function PanelReportes({
               <div className="flex items-center gap-2 text-[0.8125rem] font-semibold">
                 <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: color(f.cliente.id) }} aria-hidden />
                 <span className="min-w-0 flex-1 truncate">{f.cliente.nombre}</span>
-                <span
+                <button
+                  onClick={() => alternar("dia")}
+                  aria-expanded={abierta === "dia"}
+                  aria-label={`Cambiar el día del reporte de ${f.cliente.nombre}`}
                   className={cn(
-                    "shrink-0 rounded-full px-2 py-0.5 text-[0.6875rem] font-medium",
+                    "tocable flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[0.6875rem] font-medium",
                     f.estado === "enviado" ? "bg-verde/15 text-verde" : f.atrasado ? "font-semibold text-[var(--color-error)]" : "bg-ambar/15 text-ambar",
                   )}
                 >
-                  {f.estado === "enviado" ? "Enviado" : f.atrasado ? `Venció el ${fechaCorta(vence)}` : `Vence ${fechaCorta(vence)}`}
-                </span>
+                  {f.estado === "enviado" ? "Enviado" : f.atrasado ? `Venció el ${fechaCorta(f.vence)}` : `Vence ${fechaCorta(f.vence)}`}
+                  <CalendarDays size={11} aria-hidden />
+                </button>
               </div>
               <div className="mt-1.5 flex flex-wrap gap-1.5 pl-4">
                 <Paso hecho={!!f.reporte?.analisis} activo={abierta === "analisis"} onClick={() => alternar("analisis")}>
@@ -100,7 +106,12 @@ export function PanelReportes({
                   Enviado
                 </Paso>
               </div>
-              {abierta && (
+              {abierta === "dia" && (
+                <div className="aparece mt-2 pl-4">
+                  <CampoDiaReporte cliente={f.cliente} autoFocus onGuardar={(dia) => onDia(f, dia)} />
+                </div>
+              )}
+              {abierta && abierta !== "dia" && (
                 <textarea
                   key={`${abierta}:${f.reporte?.[abierta] ?? ""}`}
                   autoFocus

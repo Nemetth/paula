@@ -25,19 +25,31 @@ function tituloDe(item: ItemHoy): string {
 
 /** A client's work today: "Carla · 8 historias · 2 posteos". The tick takes the
  * whole card, or it opens to tick piece by piece. Slides like a row: right is
- * done, left is tomorrow, and the three dots say the same for who doesn't slide. */
+ * done, left is tomorrow, and the three dots say the same for who doesn't slide.
+ * Urgente and Próximas entregas use the same card, with what each one adds. */
 export function TarjetaHoy({
   tarjeta: t,
   color,
   onTildar,
   onDeshacer,
   onManana,
+  inicio,
+  fin,
+  accion,
+  className,
 }: {
   tarjeta: Tarjeta;
   color?: string;
   onTildar: (items: ItemHoy[]) => void;
   onDeshacer: (items: ItemHoy[]) => void;
   onManana: (t: Tarjeta) => void;
+  /** Right after the tick: the delivery's date. */
+  inicio?: React.ReactNode;
+  /** Right before the arrow: the delivery's traffic light. */
+  fin?: React.ReactNode;
+  /** Its own button, on a line below next to the detail: "Correr entrega". */
+  accion?: React.ReactNode;
+  className?: string;
 }) {
   const [abierta, setAbierta] = useState(false);
   const [menu, setMenu] = useState(false);
@@ -46,7 +58,7 @@ export function TarjetaHoy({
   const sePuedeMover = t.movibles.length > 0;
 
   return (
-    <div className={cn("overflow-hidden rounded-[14px] border border-borde/70 bg-bg-elevada shadow-[var(--shadow-papel)]", hecha && "bg-bg-elevada/60")}>
+    <div className={cn("overflow-hidden rounded-[14px] border border-borde/70 bg-bg-elevada shadow-[var(--shadow-papel)]", hecha && "bg-bg-elevada/60", className)}>
       <FilaDeslizable onHecha={hecha ? undefined : () => onTildar(t.pendientes)} onManana={sePuedeMover ? () => onManana(t) : undefined}>
         <div className={cn("flex items-center gap-2.5 px-3 py-2", hecha && "opacity-55")}>
           <Tilde
@@ -55,6 +67,7 @@ export function TarjetaHoy({
             onTildar={() => onTildar(t.pendientes)}
             onDeshacer={() => onDeshacer(t.items)}
           />
+          {inicio}
           <button
             onClick={() => seAbre && setAbierta((v) => !v)}
             aria-expanded={seAbre ? abierta : undefined}
@@ -67,8 +80,9 @@ export function TarjetaHoy({
             <span className={cn("block text-[0.8125rem] leading-snug", hecha && "line-through decoration-texto-secundario/50")}>
               {t.partes.join(" · ")}
             </span>
-            {t.detalle && <span className="block text-[0.75rem] leading-snug text-texto-secundario">{t.detalle}</span>}
+            {t.detalle && !accion && <span className="block text-[0.75rem] leading-snug text-texto-secundario">{t.detalle}</span>}
           </button>
+          {fin}
           {seAbre && (
             <ChevronDown size={15} aria-hidden className={cn("shrink-0 text-texto-secundario transition-transform duration-300", abierta && "rotate-180")} />
           )}
@@ -83,6 +97,13 @@ export function TarjetaHoy({
           )}
         </div>
       </FilaDeslizable>
+
+      {accion && (
+        <div className="flex items-center justify-between gap-2 pb-2 pl-[2.875rem] pr-3">
+          <span className="min-w-0 text-[0.75rem] leading-snug text-texto-secundario">{t.detalle}</span>
+          {accion}
+        </div>
+      )}
 
       {abierta && seAbre && (
         <ul className="aparece flex flex-col border-t border-borde/70 px-3 py-1">

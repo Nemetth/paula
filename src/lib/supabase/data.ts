@@ -588,6 +588,8 @@ export interface NuevoClienteInput {
   adsEstadoCuenta?: AdsEstadoCuenta;
   adsRefreshCreativos?: string;
   adsEstrategia?: string;
+  /** `null` clears it. */
+  adsDiaReporte?: number | null;
   ultimoAumento?: string;
   notasReunion?: string;
 }
@@ -617,6 +619,7 @@ function clienteInputToRow(input: Partial<NuevoClienteInput>) {
     ads_estado_cuenta: input.adsEstadoCuenta,
     ads_refresh_creativos: vaciable(input.adsRefreshCreativos),
     ads_estrategia: vaciable(input.adsEstrategia),
+    ads_dia_reporte: input.adsDiaReporte,
     ultimo_aumento: vaciable(input.ultimoAumento),
     notas_reunion: vaciable(input.notasReunion),
   };

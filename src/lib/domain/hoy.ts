@@ -10,8 +10,8 @@ import { DIAS_URGENTE, Entrega, ORDEN_TIPOS } from "./entregas";
 import { cantidadPiezas } from "./labels";
 import { corrimientosSugeridos, enumerar } from "./mensajes";
 import { Asignacion, CargaDia, Plan, UnidadTrabajo, atrasadasProximas, tareasDelDia } from "./planner";
-import { AdsChequeo, AdsReporte, Client, FijoDiario, Pieza } from "./types";
-import { clientesAds, reportesDelMes, venceReporte } from "./ads";
+import { AdsChequeo, AdsReporte, Client, FijoDiario, Pieza, esperaGrabacionLaPieza } from "./types";
+import { clientesAds, reportesDelMes, unidadDeReporte } from "./ads";
 import type { TareaHecha } from "@/lib/supabase/data";
 
 /** Due in 3 days or less, already late, or unblocks a recording. */
@@ -169,6 +169,14 @@ function bloqueDe(item: ItemHoy): BloqueHoy {
   return tipo.startsWith("ads") ? "ads" : "contenido";
 }
 
+/** What an item counts as when a card says what's on it. */
+function unidadesDeItem(i: ItemHoy, piezas: Pieza[]): Pick<UnidadTrabajo, "tipo" | "piezaTipo" | "etiqueta">[] {
+  if (i.tipo === "unidad") return [i.asignacion.unidad];
+  if (i.tipo !== "registro") return [];
+  const r = i.registro;
+  return [{ tipo: r.tipo as UnidadTrabajo["tipo"], etiqueta: r.etiqueta, piezaTipo: piezas.find((p) => p.id === r.unidadId.split(":")[0])?.tipo }];
+}
+
 /** The items as cards, in the order they first appear (so what's pending comes first). */
 export function tarjetasDeHoy(items: ItemHoy[], clients: Client[], piezas: Pieza[]): TarjetaHoy[] {
   const nombres = new Map(clients.map((c) => [c.id, c.nombre]));
@@ -182,13 +190,6 @@ export function tarjetasDeHoy(items: ItemHoy[], clients: Client[], piezas: Pieza
     grupos.set(clave, g);
   }
 
-  const unidadDe = (i: ItemHoy): Pick<UnidadTrabajo, "tipo" | "piezaTipo" | "etiqueta">[] => {
-    if (i.tipo === "unidad") return [i.asignacion.unidad];
-    if (i.tipo !== "registro") return [];
-    const r = i.registro;
-    return [{ tipo: r.tipo as UnidadTrabajo["tipo"], etiqueta: r.etiqueta, piezaTipo: piezas.find((p) => p.id === r.unidadId.split(":")[0])?.tipo }];
-  };
-
   const tarjetas = [...grupos].map(([clave, g]): TarjetaHoy => {
     const pendientes = g.items.filter((i) => !i.hecha);
     const movibles = pendientes.flatMap((i) => (i.tipo === "unidad" ? [i.asignacion] : []));
@@ -200,7 +201,7 @@ export function tarjetasDeHoy(items: ItemHoy[], clients: Client[], piezas: Pieza
     if (clave === "fijos") {
       return { ...base, titulo: "Tus fijos", partes: [`${hechas} de ${g.items.length}`], conReporte: false };
     }
-    const unidades = (pendientes.length > 0 ? pendientes : g.items).flatMap(unidadDe);
+    const unidades = (pendientes.length > 0 ? pendientes : g.items).flatMap((i) => unidadesDeItem(i, piezas));
     const limite = movibles.map((a) => a.unidad).filter((u) => u.limite).sort((a, b) => (a.limite as string).localeCompare(b.limite as string))[0];
     return {
       ...base,
@@ -216,14 +217,120 @@ export function tarjetasDeHoy(items: ItemHoy[], clients: Client[], piezas: Pieza
   return tarjetas.sort((a, b) => orden(a) - orden(b));
 }
 
+/** What the cards outside today's list need to know what's ticked. */
+export interface DatosDeTarjetas {
+  clients: Client[];
+  piezas: Pieza[];
+  registros: TareaHecha[];
+  locales: Set<string>;
+  hoyISO: string;
+}
+
+/** A delivery as a card, like the ones on today's list: its pending pieces, plus
+ * what was ticked today so it can be taken back. Built from the pieces and not
+ * from the plan, which leaves out reels waiting on a recording and pieces whose
+ * calendar isn't approved: she may have done them anyway. */
+export function tarjetaDeEntrega(e: Pick<Entrega, "clienteId" | "fecha">, detalle: string, d: DatosDeTarjetas): TarjetaHoy {
+  const cliente = d.clients.find((c) => c.id === e.clienteId);
+  const suyas = d.piezas.filter((p) => p.clienteId === e.clienteId && p.fechaEntrega === e.fecha);
+  const items = suyas.flatMap((p): ItemHoy[] => {
+    const id = `${p.id}:edicion`;
+    const registro = d.registros.find((r) => r.unidadId === id);
+    if (registro) return [{ clave: `registro:${id}`, tipo: "registro", hecha: true, registro }];
+    if (p.hecha) return [];
+    const verbo = cliente && esperaGrabacionLaPieza(cliente, p.tipo) ? "Editar" : "Producir";
+    const unidad: UnidadTrabajo = {
+      id,
+      tipo: "edicion",
+      categoria: "produccion",
+      clienteId: p.clienteId,
+      piezaId: p.id,
+      piezaTipo: p.tipo,
+      etiqueta: `${verbo} · ${p.titulo ?? p.tipo}`,
+      peso: 1,
+      repartir: false,
+      intocable: false,
+    };
+    return [{ clave: id, tipo: "unidad", hecha: d.locales.has(id), asignacion: { unidad, fecha: e.fecha, atrasada: false, enMargen: false, sobrecarga: false } }];
+  });
+  const pendientes = items.filter((i) => !i.hecha);
+  const listas = suyas.length - pendientes.length;
+  const partes = partesDeUnidades((pendientes.length > 0 ? pendientes : items).flatMap((i) => unidadesDeItem(i, d.piezas)));
+  return {
+    clave: `entrega:${e.clienteId}:${e.fecha}`,
+    bloque: "contenido",
+    clienteId: e.clienteId,
+    titulo: cliente?.nombre ?? "Cliente",
+    partes: partes.concat(listas > 0 && pendientes.length > 0 ? [`${listas} de ${suyas.length} listas`] : []),
+    detalle,
+    conReporte: false,
+    items,
+    pendientes,
+    movibles: [],
+  };
+}
+
+/** "en 5 días · falta grabar": when a delivery is due and what it's waiting on. */
+export function detalleDeEntrega(e: Entrega): string {
+  const cuando = e.dias < 0 ? `atrasada ${-e.dias} ${e.dias === -1 ? "día" : "días"}` : e.dias === 0 ? "hoy" : e.dias === 1 ? "mañana" : `en ${e.dias} días`;
+  return [cuando, e.esperaGrabacion && "falta grabar", e.esperaAprobacion && "espera aprobación"].filter(Boolean).join(" · ");
+}
+
 export type LineaUrgente =
   | { clave: string; tipo: "entrega"; clienteId: string; faltan: number; fecha: string; vencida: boolean; fechaNueva: string }
-  | { clave: string; tipo: "reporte"; clienteId: string; etiqueta: string; fecha: string }
+  | { clave: string; tipo: "reporte"; clienteId: string; periodo: string; etiqueta: string; fecha: string }
   | { clave: string; tipo: "unidad"; asignacion: Asignacion };
 
+export type LineaEntrega = Extract<LineaUrgente, { tipo: "entrega" }>;
+
+export interface TarjetaUrgente {
+  tarjeta: TarjetaHoy;
+  /** The delivery it can move, with "Correr entrega". */
+  entrega?: LineaEntrega;
+}
+
+/** Urgente as cards: one per delivery, one per report, and the rest of what's late
+ * together per client. Nothing here is "for tomorrow": it's already late. */
+export function tarjetasUrgentes(lineas: LineaUrgente[], d: DatosDeTarjetas): TarjetaUrgente[] {
+  const cartas: TarjetaUrgente[] = [];
+  const sueltas: ItemHoy[] = [];
+  for (const l of lineas) {
+    if (l.tipo === "entrega") {
+      const detalle = `${l.vencida ? "venció el" : "no llega al"} ${fechaCorta(l.fecha)}`;
+      cartas.push({ tarjeta: tarjetaDeEntrega(l, detalle, d), entrega: l });
+    } else if (l.tipo === "reporte") {
+      const unidad = unidadDeReporte(l.clienteId, l.periodo);
+      const hecha = d.locales.has(unidad.id);
+      const item: ItemHoy = { clave: unidad.id, tipo: "unidad", hecha, asignacion: { unidad, fecha: l.fecha, atrasada: true, enMargen: false, sobrecarga: false } };
+      cartas.push({
+        tarjeta: {
+          clave: l.clave,
+          bloque: "ads",
+          clienteId: l.clienteId,
+          titulo: d.clients.find((c) => c.id === l.clienteId)?.nombre ?? "Cliente",
+          partes: [l.etiqueta],
+          detalle: `venció el ${fechaCorta(l.fecha)}`,
+          conReporte: true,
+          items: [item],
+          pendientes: hecha ? [] : [item],
+          movibles: [],
+        },
+      });
+    } else {
+      sueltas.push({ clave: l.clave, tipo: "unidad", hecha: d.locales.has(l.asignacion.unidad.id), asignacion: l.asignacion });
+    }
+  }
+  for (const t of tarjetasDeHoy(sueltas, d.clients, d.piezas)) {
+    const limite = t.movibles.flatMap((a) => a.unidad.limite ?? []).sort()[0];
+    const detalle = limite && `${limite < d.hoyISO ? "venció el" : "para el"} ${fechaCorta(limite)}`;
+    cartas.push({ tarjeta: { ...t, detalle: detalle || undefined, movibles: [] } });
+  }
+  return cartas;
+}
+
 /** Urgente, one line per thing to decide: deliveries overdue or that can't make
- * their date (to move them), reports past day 5, and any other work that is late
- * or doesn't fit. Oldest first. */
+ * their date (to move them), reports past their due day, and any other work that
+ * is late or doesn't fit. Oldest first. */
 export function lineasUrgentes(input: {
   hoy: Hoy;
   plan: Plan;
@@ -269,8 +376,9 @@ export function lineasUrgentes(input: {
       clave: `reporte:${r.cliente.id}`,
       tipo: "reporte" as const,
       clienteId: r.cliente.id,
+      periodo: r.periodo,
       etiqueta: `Reporte de ${format(fromISODate(`${r.periodo}-01`), "MMMM", { locale: es })}`,
-      fecha: venceReporte(today),
+      fecha: r.vence,
     }));
 
   // Pieces with a delivery are already on that delivery's line, and reports on theirs.

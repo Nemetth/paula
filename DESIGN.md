@@ -90,8 +90,9 @@ Everything collapses under `prefers-reduced-motion`.
 
 ## Components
 
-- **Hoy card** (`TarjetaHoy`): one per client. Tick at left, client dot + name, what's on it ("3 historias · 1 posteo"), the delivery below; opens to tick piece by piece, three dots for the rest. Done cards stay in the list, muted and struck through, at the bottom.
-- **Urgente line** (`FilaUrgente`): one line per delivery with its action. Keeps the red left edge Paula drew, the one exception to the side-border rule below.
+- **Hoy card** (`TarjetaHoy`): one per client. Tick at left, client dot + name, what's on it ("3 historias · 1 posteo"), the delivery below; opens to tick piece by piece, three dots for the rest. Done cards stay in the list, muted and struck through, at the bottom. Urgente and Próximas entregas use the same card.
+- **Urgente card**: the Hoy card with the red left edge Paula drew, the one exception to the side-border rule below, and "Correr entrega" on a line below when it's a delivery.
+- **Próximas entregas card**: the Hoy card with the delivery's date as a calendar leaf after the tick and its traffic light before the arrow.
 - **Ads card** (`TarjetaCuenta`): a tick on what's due, an icon on what isn't yet (tapping it still does it, with undo), when on the right, "Falta" notes as an amber band.
 - **Buttons**: primary = dark grey fill, white text (one per screen); secondary = bordered; icon buttons round.
 - **Date fields** in Clientes save when the date is chosen from the calendar, or when the field loses focus if typed.

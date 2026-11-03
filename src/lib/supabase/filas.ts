@@ -31,6 +31,7 @@ export type ClientRow = {
   ads_estado_cuenta: AdsEstadoCuenta | null;
   ads_refresh_creativos: string | null;
   ads_estrategia?: string | null;
+  ads_dia_reporte?: number | null;
   ultimo_aumento: string | null;
   notas_reunion: string | null;
   rubro: string | null;
@@ -57,6 +58,7 @@ export function rowToClient(r: ClientRow): Client {
     adsEstadoCuenta: r.ads_estado_cuenta ?? "activa",
     adsRefreshCreativos: r.ads_refresh_creativos ?? undefined,
     adsEstrategia: r.ads_estrategia ?? undefined,
+    adsDiaReporte: r.ads_dia_reporte ?? undefined,
     ultimoAumento: r.ultimo_aumento ?? undefined,
     notasReunion: r.notas_reunion ?? undefined,
     rubro: r.rubro ?? undefined,

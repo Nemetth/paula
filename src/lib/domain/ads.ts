@@ -5,13 +5,14 @@
 // - once a week: the ads review, each account on its own weekday so the
 //   accounts spread over the week;
 // - every 15 days: the ads swap ("recambio"), counted from the last one;
-// - at the start of the month: each account's report, spread over days 1 to 5.
+// - at the start of the month: each account's report, spread over days 1 to 5,
+//   unless the account has its own report day.
 //
 // The three routines are planner units, so they show up by themselves in Hoy
 // and the calendar to be ticked. What was done is kept as each account's
 // history (ads_historial for reviews and swaps, ads_reportes for reports).
 
-import { addDays, differenceInCalendarDays, format, getISOWeek, getISOWeekYear, startOfISOWeek, subMonths } from "date-fns";
+import { addDays, differenceInCalendarDays, format, getDaysInMonth, getISOWeek, getISOWeekYear, startOfISOWeek, subMonths } from "date-fns";
 import { es } from "date-fns/locale";
 import { fromISODate, toISODate } from "./dates";
 import { proximasFechasDeAds } from "./fechas-especiales";
@@ -22,7 +23,7 @@ import { AdsChequeo, AdsFalta, AdsFecha, AdsRegistro, AdsReporte, CADENCIA_RECAM
 export const PESO_REVISION = 1;
 export const PESO_RECAMBIO = 1;
 export const PESO_REPORTE = 1;
-/** Monthly reports are due on days 1 to this day. */
+/** Monthly reports are due on days 1 to this day, unless the account has its own. */
 export const ULTIMO_DIA_REPORTE = 5;
 
 export function clientesAds(clients: Client[]): Client[] {
@@ -57,14 +58,46 @@ export function enLaSemana(d: Date, diaSemana: number): string {
   return toISODate(addDays(startOfISOWeek(d), (diaSemana + 6) % 7));
 }
 
-/** Day of the month each account's report is due, spread over days 1 to 5. */
+/** When the account's report is due in `mes`: its own day (a 31 lands on the last
+ * day of a shorter month), else day 5. */
+export function venceReporte(cliente: Client, mes: Date): string {
+  const dia = Math.min(cliente.adsDiaReporte ?? ULTIMO_DIA_REPORTE, getDaysInMonth(mes));
+  return toISODate(new Date(mes.getFullYear(), mes.getMonth(), dia));
+}
+
+/** The day each account's report is planned for: an account with its own day on
+ * that day (or the working day before it), the rest spread over days 1 to 5. */
 export function diasDeReporte(clients: Client[], estructura: EstructuraSemanal, mes: Date): Map<string, string> {
   const trabajo = new Set(diasDeTrabajo(estructura));
   const primeros = Array.from({ length: ULTIMO_DIA_REPORTE }, (_, i) => new Date(mes.getFullYear(), mes.getMonth(), i + 1));
   const habiles = primeros.filter((d) => trabajo.has(d.getDay()));
   const dias = (habiles.length > 0 ? habiles : primeros).map(toISODate);
   const cuentas = cuentasConRutina(clients);
-  return new Map(cuentas.map((c, i) => [c.id, repartir(dias, i, cuentas.length)]));
+  const sinDia = cuentas.filter((c) => !c.adsDiaReporte);
+  const planes = new Map(sinDia.map((c, i) => [c.id, repartir(dias, i, sinDia.length)]));
+  for (const c of cuentas) {
+    if (!c.adsDiaReporte) continue;
+    const vence = fromISODate(venceReporte(c, mes));
+    let dia = vence;
+    while (!trabajo.has(dia.getDay()) && dia.getDate() > 1) dia = addDays(dia, -1);
+    planes.set(c.id, toISODate(trabajo.has(dia.getDay()) ? dia : vence));
+  }
+  return planes;
+}
+
+/** A month's report as a unit of work, the same one Hoy and Ads tick. */
+export function unidadDeReporte(clienteId: string, periodo: string): UnidadTrabajo {
+  const nombreMes = format(fromISODate(`${periodo}-01`), "MMMM", { locale: es });
+  return {
+    id: `ads-reporte:${clienteId}:${periodo}`,
+    tipo: "ads-reporte",
+    categoria: "produccion",
+    clienteId,
+    etiqueta: `Reporte de Ads de ${nombreMes}`,
+    peso: PESO_REPORTE,
+    repartir: false,
+    intocable: false,
+  };
 }
 
 /** When the next ads swap is due: 15 days after the last one. Accounts with no
@@ -94,7 +127,7 @@ export function revisadaEstaSemana(clienteId: string, historial: AdsRegistro[], 
 
 /** Planner input: every account's routines from this week up to the horizon.
  * The weekly review is the first thing to give way on a full day and has no
- * hard deadline; the swap waits for its day; the report must be in by day 5. */
+ * hard deadline; the swap waits for its day; the report must be in by its due day. */
 export function unidadesAds(input: {
   clients: Client[];
   historial: AdsRegistro[];
@@ -152,25 +185,18 @@ export function unidadesAds(input: {
     }
   }
 
-  // Reports: the month that just ended, due between day 1 and day 5 of each month.
+  // Reports: the month that just ended, due on each account's day of each month.
   for (let mes = new Date(today.getFullYear(), today.getMonth(), 1); mes <= fin; mes = new Date(mes.getFullYear(), mes.getMonth() + 1, 1)) {
     const periodo = format(subMonths(mes, 1), "yyyy-MM");
     const dias = diasDeReporte(clients, estructura, mes);
-    const limite = toISODate(new Date(mes.getFullYear(), mes.getMonth(), ULTIMO_DIA_REPORTE));
-    const nombreMes = format(subMonths(mes, 1), "MMMM", { locale: es });
     for (const c of cuentas) {
       if (reportes.some((r) => r.clienteId === c.id && r.periodo === periodo && r.estado === "enviado")) continue;
       // A client that started after that month has nothing to report.
       if (toISODate(new Date(c.creadoEn)).slice(0, 7) > periodo) continue;
+      const limite = venceReporte(c, mes);
       const dia = dias.get(c.id) ?? limite;
       unidades.push({
-        ...base,
-        id: `ads-reporte:${c.id}:${periodo}`,
-        tipo: "ads-reporte",
-        categoria: "produccion",
-        clienteId: c.id,
-        etiqueta: `Reporte de Ads de ${nombreMes}`,
-        peso: PESO_REPORTE,
+        ...unidadDeReporte(c.id, periodo),
         desde: dia < hoy ? hoy : dia,
         objetivo: dia,
         limite,
@@ -184,14 +210,16 @@ export interface FilaReporte {
   cliente: Client;
   periodo: string; // month the report covers
   estado: "pendiente" | "enviado";
-  /** The day of 1 to 5 it is planned for. */
+  /** The day it is planned for. */
   dia?: string;
-  /** Past day 5 and still not sent. */
+  /** The day it is due. */
+  vence: string;
+  /** Past its due day and still not sent. */
   atrasado: boolean;
   reporte?: AdsReporte;
 }
 
-/** Reports for the month that just ended. Each is due between day 1 and day 5. */
+/** Reports for the month that just ended, each with its due day. */
 export function reportesDelMes(clients: Client[], reportes: AdsReporte[], today: Date, estructura?: EstructuraSemanal): FilaReporte[] {
   const periodo = format(subMonths(today, 1), "yyyy-MM");
   const dias = estructura ? diasDeReporte(clients, estructura, today) : undefined;
@@ -200,18 +228,18 @@ export function reportesDelMes(clients: Client[], reportes: AdsReporte[], today:
     .map((cliente) => {
       const reporte = reportes.find((r) => r.clienteId === cliente.id && r.periodo === periodo);
       const enviado = reporte?.estado === "enviado";
+      const vence = venceReporte(cliente, today);
       return {
         cliente,
         periodo,
         estado: enviado ? "enviado" : "pendiente",
         dia: dias?.get(cliente.id),
-        atrasado: !enviado && today.getDate() > ULTIMO_DIA_REPORTE,
+        vence,
+        atrasado: !enviado && toISODate(today) > vence,
         reporte,
       };
     });
 }
-
-export const hoyEnVentanaDeReportes = (today: Date) => today.getDate() <= ULTIMO_DIA_REPORTE;
 
 export type TonoCuenta = "verde" | "ambar" | "rojo" | "gris";
 
@@ -253,9 +281,6 @@ export function recambioAPedirMaterial(cliente: Client, clients: Client[], today
   const toca = proximoRecambio(cliente, clients, today);
   return differenceInCalendarDays(fromISODate(toca), today) <= DIAS_PEDIR_MATERIAL ? toca : undefined;
 }
-
-/** Day 5 of this month: when the month's reports are due. */
-export const venceReporte = (today: Date) => toISODate(new Date(today.getFullYear(), today.getMonth(), ULTIMO_DIA_REPORTE));
 
 /** What the account's card says in its corner. */
 export type EstadoCuentaAds =

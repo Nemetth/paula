@@ -87,3 +87,5 @@ A developer brief document (`brief-app-gestion.md.pdf`, provided by Paula) is th
 ## Accessibility & Inclusion
 
 No product-specific requirement established yet.
+
+Scope update (2026-11-03, Paula's sixth round): Urgente and Próximas entregas use Hoy's card. A delivery opens to its pending pieces and each can be ticked without entering the client file; the card is built from the pieces, not the plan (`tarjetaDeEntrega`), so reels waiting on a recording and pieces of an unapproved calendar can be ticked too. A late report gets a tick that marks it sent, and "Correr entrega" stays on its card. Each Ads account can have its own report day (`clients.ads_dia_reporte`), set in the client file or by tapping the date on the reports panel; it drives the due date, Urgente and the plan, which places it on that day or the working day before. Empty stays days 1–5. Migration `0015_dia_de_reporte.sql`.
